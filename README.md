@@ -10,6 +10,8 @@ Software Milestone and SRS - [snipe software docs](https://github.com/NucleiAv/s
 
 Contributors must read - [snipe contributions doc](https://github.com/NucleiAv/snipe/blob/main/CONTRIBUTING.md)
 
+Comparison of snipe with other exisitng tools - [snipe vs others](https://github.com/NucleiAv/snipe/blob/main/snipe_VS_other.md)
+
 ---
 
 ## Features
