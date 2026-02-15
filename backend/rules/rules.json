@@ -1,0 +1,34 @@
+{
+  "rules": [
+    {
+      "id": "SNIPE_TYPE_MISMATCH",
+      "name": "Cross-file type mismatch",
+      "severity": "WARNING",
+      "description": "Symbol used with a different type than declared elsewhere in the repository."
+    },
+    {
+      "id": "SNIPE_ARRAY_BOUNDS",
+      "name": "Array out of bounds",
+      "severity": "ERROR",
+      "description": "Array index exceeds statically declared size."
+    },
+    {
+      "id": "SNIPE_SIGNATURE_DRIFT",
+      "name": "Function signature drift",
+      "severity": "WARNING",
+      "description": "Function call argument count does not match definition."
+    },
+    {
+      "id": "SNIPE_UNDEFINED_SYMBOL",
+      "name": "Undefined symbol",
+      "severity": "WARNING",
+      "description": "Reference to symbol not defined in repository."
+    },
+    {
+      "id": "SNIPE_SHADOWED_SYMBOL",
+      "name": "Shadowed symbol",
+      "severity": "INFO",
+      "description": "Variable may be shadowing a symbol from outer scope."
+    }
+  ]
+}

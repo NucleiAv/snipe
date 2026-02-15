@@ -1,0 +1,188 @@
+[
+  {
+    "name": "main",
+    "kind": "function",
+    "type": null,
+    "file_path": "app.py",
+    "line": 7,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "arr",
+    "kind": "array",
+    "type": "int",
+    "file_path": "core.c",
+    "line": 5,
+    "scope": "",
+    "array_size": 10,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "balance",
+    "kind": "variable",
+    "type": "float",
+    "file_path": "core.c",
+    "line": 7,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "add",
+    "kind": "function",
+    "type": "int",
+    "file_path": "core.c",
+    "line": 9,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
+        "name": "a",
+        "type": "int"
+      },
+      {
+        "name": "b",
+        "type": "int"
+      }
+    ],
+    "references": []
+  },
+  {
+    "name": "process",
+    "kind": "function",
+    "type": "void",
+    "file_path": "core.c",
+    "line": 13,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
+        "name": "count",
+        "type": "int"
+      }
+    ],
+    "references": []
+  },
+  {
+    "name": "i",
+    "kind": "variable",
+    "type": "int",
+    "file_path": "core.c",
+    "line": 14,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "arr",
+    "kind": "array",
+    "type": "int",
+    "file_path": "main.c",
+    "line": 9,
+    "scope": "",
+    "array_size": 10,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "add",
+    "kind": "variable",
+    "type": "int",
+    "file_path": "main.c",
+    "line": 11,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "process",
+    "kind": "variable",
+    "type": "void",
+    "file_path": "main.c",
+    "line": 12,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "main",
+    "kind": "function",
+    "type": "int",
+    "file_path": "main.c",
+    "line": 14,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "x",
+    "kind": "variable",
+    "type": "int",
+    "file_path": "main.c",
+    "line": 16,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "balance",
+    "kind": "variable",
+    "type": null,
+    "file_path": "utils.py",
+    "line": 5,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": []
+  },
+  {
+    "name": "greet",
+    "kind": "function",
+    "type": null,
+    "file_path": "utils.py",
+    "line": 7,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
+        "name": "name",
+        "type": null
+      }
+    ],
+    "references": []
+  },
+  {
+    "name": "compute",
+    "kind": "function",
+    "type": null,
+    "file_path": "utils.py",
+    "line": 11,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
+        "name": "a",
+        "type": null
+      },
+      {
+        "name": "b",
+        "type": null
+      },
+      {
+        "name": "c",
+        "type": null
+      }
+    ],
+    "references": []
+  }
+]
