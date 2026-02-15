@@ -5,6 +5,7 @@ Real-time code analysis that detects **cross-file semantic errors**, type incons
 **USP:** *"We catch cross-file bugs before you even save your file."*
 
 ---
+Software Milestone and SRS - [snipe software docs](https://github.com/NucleiAv/snipe/blob/master/live_repo_aware_semantic_guardian_sdp_and_srs.md)
 
 ## Features
 
