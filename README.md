@@ -141,6 +141,47 @@ echo 'export PATH="$HOME/node-v20.18.0-linux-x64/bin:$PATH"' >> ~/.zshrc
 - **app.py** – `greet("X", "Hi", "extra")` and `compute(1, 2)` → signature drift.
 - **utils.py** / **core.c** – `balance` as int vs float for cross-file type demo.
 
+## Output
+
+The terminal ouput after running the whole extension will be something like this (below)
+```
+┌──(my-py-venv)─(kali㉿kali)-[snipe/backend]
+└─$ cd /backend
+find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+source .venv/bin/activate
+uvicorn server:app --reload --port 8765
+INFO:     Will watch for changes in these directories: ['/media/sf_ai-code-scanner/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+INFO:     Started reloader process [28311] using WatchFiles
+INFO:     Started server process [28314]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:parser.repo_parser:Scanned 4 supported files, got 14 symbols
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:57936 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:57936 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 2 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/core.c: 3 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:58628 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:37754 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+```
+
 ## Directory layout
 
 ```
