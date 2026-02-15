@@ -161,6 +161,8 @@ Snipe/
 │   └── data/repo_symbols.json
 ├── demo_repo/
 ├── tests/unit_tests.py
+├── CONTRIBUTING.md
+├── License
 └── README.md
 ```
 
