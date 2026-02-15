@@ -5,7 +5,11 @@ Real-time code analysis that detects **cross-file semantic errors**, type incons
 **USP:** *"We catch cross-file bugs before you even save your file."*
 
 ---
-Software Milestone and SRS - [snipe software docs](https://github.com/NucleiAv/snipe/blob/master/live_repo_aware_semantic_guardian_sdp_and_srs.md)
+Software Milestone and SRS - [snipe software docs](https://github.com/NucleiAv/snipe/blob/main/live_repo_aware_semantic_guardian_sdp_and_srs.md)
+
+Contributors must read - [snipe contributions doc](https://github.com/NucleiAv/snipe/blob/main/CONTRIBUTING.md)
+
+---
 
 ## Features
 
@@ -183,10 +187,6 @@ From project root:
 ```bash
 python tests/unit_tests.py
 ```
-
-## License
-
-MIT.
 
 ## Notes
 The default branch has been renamed!
