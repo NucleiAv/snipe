@@ -150,7 +150,7 @@ The terminal ouput after running the whole extension will be something like this
 find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 source .venv/bin/activate
 uvicorn server:app --reload --port 8765
-INFO:     Will watch for changes in these directories: ['/media/sf_ai-code-scanner/backend']
+INFO:     Will watch for changes in these directories: ['snipe/backend']
 INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
 INFO:     Started reloader process [28311] using WatchFiles
 INFO:     Started server process [28314]
