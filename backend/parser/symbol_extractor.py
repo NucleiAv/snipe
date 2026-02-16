@@ -29,6 +29,8 @@ class Symbol:
     array_size: Optional[int] = None
     params: list[dict[str, Any]] = field(default_factory=list)
     references: list[dict[str, Any]] = field(default_factory=list)
+    return_type: Optional[str] = None
+    is_variadic: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -41,6 +43,8 @@ class Symbol:
             "array_size": self.array_size,
             "params": self.params,
             "references": self.references,
+            "return_type": self.return_type,
+            "is_variadic": self.is_variadic,
         }
 
 
@@ -107,6 +111,40 @@ def _line_of(node: Node, source: bytes) -> int:
     return source[:node.start_byte].count(b"\n") + 1
 
 
+def _get_python_type_annotation(node: Node, source: bytes) -> Optional[str]:
+    """Extract type string from a tree-sitter annotation node."""
+    if node is None:
+        return None
+    text = _source_at(node, source).strip()
+    # Strip leading ': ' or '-> ' that tree-sitter may include
+    if text.startswith("->"):
+        text = text[2:].strip()
+    if text.startswith(":"):
+        text = text[1:].strip()
+    return text if text else None
+
+
+def _infer_type_from_rhs(node: Node) -> Optional[str]:
+    """Infer Python type from a right-hand-side literal node type."""
+    _TYPE_MAP = {
+        "list": "list",
+        "tuple": "tuple",
+        "integer": "int",
+        "float": "float",
+        "string": "str",
+        "true": "bool",
+        "false": "bool",
+        "dictionary": "dict",
+    }
+    return _TYPE_MAP.get(node.type)
+
+
+def _count_elements(node: Node) -> int:
+    """Count element children of a list/tuple node (skip brackets and commas)."""
+    skip = {"(", ")", "[", "]", ","}
+    return sum(1 for c in node.children if c.type not in skip)
+
+
 def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
     symbols: list[Symbol] = []
     parser = _get_parser("python")
@@ -123,19 +161,61 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                 name = _source_at(name_node, source).strip()
                 params_node = node.child_by_field_name("parameters")
                 params = []
+                is_variadic = False
                 if params_node:
                     for c in params_node.children:
-                        if c.type == "identifier" and _source_at(c, source) != "self":
-                            params.append({"name": _source_at(c, source), "type": None})
+                        pname = _source_at(c, source).strip()
+                        if c.type == "identifier":
+                            if pname in ("self", "cls"):
+                                continue
+                            params.append({"name": pname, "type": None, "has_default": False})
+                        elif c.type == "typed_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            ptype_node = c.child_by_field_name("type")
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            ptype = _get_python_type_annotation(ptype_node, source) if ptype_node else None
+                            params.append({"name": id_name, "type": ptype, "has_default": False})
+                        elif c.type == "default_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            params.append({"name": id_name, "type": None, "has_default": True})
+                        elif c.type == "typed_default_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            ptype_node = c.child_by_field_name("type")
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            ptype = _get_python_type_annotation(ptype_node, source) if ptype_node else None
+                            params.append({"name": id_name, "type": ptype, "has_default": True})
+                        elif c.type == "list_splat_pattern":
+                            is_variadic = True
+                            id_node = next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else "args"
+                            params.append({"name": f"*{id_name}", "type": None, "has_default": False})
+                        elif c.type == "dictionary_splat_pattern":
+                            is_variadic = True
+                            id_node = next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else "kwargs"
+                            params.append({"name": f"**{id_name}", "type": None, "has_default": False})
+
+                # Extract return type annotation
+                ret_type_node = node.child_by_field_name("return_type")
+                ret_type = _get_python_type_annotation(ret_type_node, source) if ret_type_node else None
+
                 symbols.append(Symbol(
-                    name=name, kind="function", type=None,
+                    name=name, kind="function", type=ret_type,
                     file_path=file_path, line=_line_of(node, source), scope=scope,
-                    params=params
+                    params=params, return_type=ret_type, is_variadic=is_variadic,
                 ))
                 inner_scope = f"{scope}.{name}" if scope else name
                 for c in node.children:
                     walk(c, inner_scope)
             return
+
         if node.type == "class_definition":
             name_node = node.child_by_field_name("name")
             if name_node:
@@ -145,17 +225,35 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                     file_path=file_path, line=_line_of(node, source), scope=scope
                 ))
                 inner_scope = f"{scope}.{name}" if scope else name
+                # Walk children — assignments (including annotated ones like
+                # dataclass fields) are handled by the assignment branch below.
                 for c in node.children:
                     walk(c, inner_scope)
             return
+
         if node.type == "assignment":
+            # Get the RHS value node
+            rhs_node = node.child_by_field_name("right") or (node.children[-1] if len(node.children) >= 3 else None)
+            # Get the type annotation node (for annotated assignments like `x: int = 5`)
+            type_node = node.child_by_field_name("type")
+            explicit_type = _get_python_type_annotation(type_node, source) if type_node else None
+
             for c in node.children:
                 if c.type == "identifier":
                     name = _source_at(c, source).strip()
                     if name and not name.startswith("_"):
+                        inferred_type = explicit_type
+                        array_size = None
+                        kind = "variable"
+                        if rhs_node and inferred_type is None:
+                            inferred_type = _infer_type_from_rhs(rhs_node)
+                        if rhs_node and rhs_node.type in ("list", "tuple"):
+                            array_size = _count_elements(rhs_node)
+                            kind = "array"
                         symbols.append(Symbol(
-                            name=name, kind="variable", type=None,
-                            file_path=file_path, line=_line_of(node, source), scope=scope
+                            name=name, kind=kind, type=inferred_type,
+                            file_path=file_path, line=_line_of(node, source), scope=scope,
+                            array_size=array_size,
                         ))
                     break
                 if c.type in ("tuple_pattern", "list_pattern"):
@@ -167,6 +265,7 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                                     name=name, kind="variable", type=None,
                                     file_path=file_path, line=_line_of(node, source), scope=scope
                                 ))
+
         for c in node.children:
             walk(c, scope)
 
@@ -339,23 +438,23 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
         return refs
 
     def walk(node: Node):
-        if node.type == "call_expression" and language == "python":
+        if node.type in ("call_expression", "call") and language == "python":
             fn = node.child_by_field_name("function")
             if fn:
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type != "(" and c.type != ")" and c.type != ","]) if args else 0
+                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
                 refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
-        if node.type == "call_expression" and language == "c":
+        if node.type in ("call_expression", "call") and language == "c":
             fn = node.child_by_field_name("function")
             if fn and fn.type == "identifier":
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type != "(" and c.type != ")" and c.type != ","]) if args else 0
+                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
                 refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
-        if node.type == "subscript_expression" and language == "python":
+        if node.type in ("subscript_expression", "subscript") and language == "python":
             obj = node.child_by_field_name("value")
-            idx = node.child_by_field_name("index")
+            idx = node.child_by_field_name("subscript") or node.child_by_field_name("index")
             if obj and idx:
                 name = _source_at(obj, source).strip()
                 idx_str = _source_at(idx, source).strip()
@@ -364,8 +463,8 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
                 except ValueError:
                     index_val = None
                 refs.append(Reference(name=name, kind="array_access", line=_line_of(node, source), index_value=index_val))
-        if node.type == "array_declarator" or (node.type == "subscript_expression" and language == "c"):
-            if language == "c" and node.type == "subscript_expression":
+        if node.type == "array_declarator" or (node.type in ("subscript_expression", "subscript") and language == "c"):
+            if language == "c" and node.type in ("subscript_expression", "subscript"):
                 arr = node.child_by_field_name("argument")
                 idx = node.child_by_field_name("index")
                 # Some tree-sitter-c versions use different fields; try positional fallback (array, '[', index, ']').
@@ -382,7 +481,7 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
                     refs.append(Reference(name=name, kind="array_access", line=_line_of(node, source), index_value=index_val))
         if node.type == "identifier" and language == "python":
             parent = node.parent
-            if parent and parent.type not in ("call_expression", "function_definition", "parameters", "attribute"):
+            if parent and parent.type not in ("call_expression", "call", "function_definition", "parameters", "attribute"):
                 name = _source_at(node, source).strip()
                 if name and not name.startswith("_"):
                     refs.append(Reference(name=name, kind="read", line=_line_of(node, source)))

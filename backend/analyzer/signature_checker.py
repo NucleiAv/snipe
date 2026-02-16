@@ -32,13 +32,27 @@ def check_function_signatures(
         repo_def = funcs.get(ref.name)
         if not repo_def:
             continue
-        expected = len(repo_def.get("params") or [])
-        if ref.arg_count != expected:
+        params = repo_def.get("params") or []
+        is_variadic = repo_def.get("is_variadic", False)
+
+        # Filter out *args/**kwargs params for counting
+        regular_params = [p for p in params if not p.get("name", "").startswith("*")]
+        min_args = sum(1 for p in regular_params if not p.get("has_default", False))
+        max_args = float("inf") if is_variadic else len(regular_params)
+
+        if ref.arg_count < min_args or ref.arg_count > max_args:
+            # Build descriptive expectation string
+            if is_variadic:
+                expected_str = f"at least {min_args}"
+            elif min_args == max_args:
+                expected_str = f"{min_args}"
+            else:
+                expected_str = f"{min_args} to {int(max_args)}"
             diagnostics.append(Diagnostic(
                 file=current_file,
                 line=ref.line,
                 severity="WARNING",
                 code="SNIPE_SIGNATURE_DRIFT",
-                message=f"Function '{ref.name}' expects {expected} argument(s) but {ref.arg_count} provided (see {repo_def.get('file_path', '?')}:{repo_def.get('line', '?')}).",
+                message=f"Function '{ref.name}' expects {expected_str} argument(s) but {ref.arg_count} provided (see {repo_def.get('file_path', '?')}:{repo_def.get('line', '?')}).",
             ))
     return diagnostics
