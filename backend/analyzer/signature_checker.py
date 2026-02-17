@@ -51,7 +51,7 @@ def check_function_signatures(
             diagnostics.append(Diagnostic(
                 file=current_file,
                 line=ref.line,
-                severity="WARNING",
+                severity="ERROR",
                 code="SNIPE_SIGNATURE_DRIFT",
                 message=f"Function '{ref.name}' expects {expected_str} argument(s) but {ref.arg_count} provided (see {repo_def.get('file_path', '?')}:{repo_def.get('line', '?')}).",
             ))

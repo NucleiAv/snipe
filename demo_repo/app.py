@@ -9,7 +9,7 @@ def main():
     print(greet("X", "Hi", "extra"))  # BUG: 3 args, greet expects 1 or 2
     print(compute(1, 2))           # BUG: 2 args, compute expects 3
     print(balance)
-    val = scores[10]               # BUG: index 10, scores has size 5
+    val = scores[6]               # BUG: index 10, scores has size 5
 
 if __name__ == "__main__":
     main()

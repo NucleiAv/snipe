@@ -8,7 +8,24 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "val",
+    "kind": "variable",
+    "type": null,
+    "file_path": "app.py",
+    "line": 12,
+    "scope": "main",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "arr",
@@ -19,7 +36,10 @@
     "scope": "",
     "array_size": 10,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "balance",
@@ -30,7 +50,10 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "add",
@@ -50,7 +73,10 @@
         "type": "int"
       }
     ],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "process",
@@ -66,7 +92,10 @@
         "type": "int"
       }
     ],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "i",
@@ -77,7 +106,10 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "arr",
@@ -88,7 +120,10 @@
     "scope": "",
     "array_size": 10,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": true
   },
   {
     "name": "add",
@@ -99,7 +134,10 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": true
   },
   {
     "name": "process",
@@ -110,7 +148,10 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": true
   },
   {
     "name": "main",
@@ -121,7 +162,10 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "x",
@@ -132,57 +176,313 @@
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 15,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 16,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 17,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 21,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 22,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "result",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 23,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "first",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 28,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "last",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 29,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "oob",
+    "kind": "variable",
+    "type": null,
+    "file_path": "test_bugs.py",
+    "line": 30,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
     "name": "balance",
     "kind": "variable",
-    "type": null,
-    "file_path": "utils.py",
-    "line": 5,
+    "type": "float",
+    "file_path": "test_bugs.py",
+    "line": 34,
     "scope": "",
     "array_size": null,
     "params": [],
-    "references": []
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
-    "name": "greet",
-    "kind": "function",
+    "name": "cfg",
+    "kind": "variable",
     "type": null,
+    "file_path": "test_bugs.py",
+    "line": 38,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "balance",
+    "kind": "variable",
+    "type": "int",
     "file_path": "utils.py",
     "line": 7,
     "scope": "",
     "array_size": null,
-    "params": [
-      {
-        "name": "name",
-        "type": null
-      }
-    ],
-    "references": []
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   },
   {
-    "name": "compute",
+    "name": "scores",
+    "kind": "array",
+    "type": "list",
+    "file_path": "utils.py",
+    "line": 9,
+    "scope": "",
+    "array_size": 5,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "greet",
     "kind": "function",
-    "type": null,
+    "type": "str",
     "file_path": "utils.py",
     "line": 11,
     "scope": "",
     "array_size": null,
     "params": [
       {
+        "name": "name",
+        "type": "str",
+        "has_default": false
+      },
+      {
+        "name": "greeting",
+        "type": "str",
+        "has_default": true
+      }
+    ],
+    "references": [],
+    "return_type": "str",
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "compute",
+    "kind": "function",
+    "type": "int",
+    "file_path": "utils.py",
+    "line": 15,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
         "name": "a",
-        "type": null
+        "type": "int",
+        "has_default": false
       },
       {
         "name": "b",
-        "type": null
+        "type": "int",
+        "has_default": false
       },
       {
         "name": "c",
-        "type": null
+        "type": "int",
+        "has_default": false
       }
     ],
-    "references": []
+    "references": [],
+    "return_type": "int",
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "flexible",
+    "kind": "function",
+    "type": "None",
+    "file_path": "utils.py",
+    "line": 19,
+    "scope": "",
+    "array_size": null,
+    "params": [
+      {
+        "name": "*args",
+        "type": null,
+        "has_default": false
+      },
+      {
+        "name": "**kwargs",
+        "type": null,
+        "has_default": false
+      }
+    ],
+    "references": [],
+    "return_type": "None",
+    "is_variadic": true,
+    "is_extern": false
+  },
+  {
+    "name": "Config",
+    "kind": "class",
+    "type": null,
+    "file_path": "utils.py",
+    "line": 24,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "host",
+    "kind": "variable",
+    "type": "str",
+    "file_path": "utils.py",
+    "line": 25,
+    "scope": "Config",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
+  },
+  {
+    "name": "port",
+    "kind": "variable",
+    "type": "int",
+    "file_path": "utils.py",
+    "line": 26,
+    "scope": "Config",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": false
   }
 ]

@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node / JS
+node_modules/
+out/
+dist/
+
+# Editor
+.vscode/
+.DS_Store

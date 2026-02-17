@@ -7,7 +7,7 @@
 
 ## The Core Problem with Every Existing Tool
 
-All current static analysis and security tools operate at one of three stages:
+All current static analysis and security tools operate at one of these stages:
 
 ```
 [You type] → [You save] → [You commit] → [You push] → [CI/CD runs] → [PR reviewed]
