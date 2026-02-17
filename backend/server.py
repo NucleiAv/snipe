@@ -21,10 +21,18 @@ from analyzer.type_checker import check_type_mismatch
 from analyzer.bounds_checker import check_array_bounds
 from analyzer.signature_checker import check_function_signatures
 from analyzer.type_checker import Diagnostic
+from analyzer.undefined_checker import check_undefined_symbols
+from analyzer.shadow_checker import check_variable_shadowing
+from analyzer.format_checker import check_format_strings
+from analyzer.unused_checker import check_unused_externs, check_dead_imports
+from analyzer.return_checker import check_return_types
+from analyzer.safety_checker import check_unsafe_functions
+from analyzer.assignment_checker import check_assignment_types
+from analyzer.arg_type_checker import check_arg_types
+from analyzer.struct_checker import check_struct_access
 from graph.repo_graph import build_repo_graph
 from graph.graph_builder import build_d3_graph
 from explainer import get_explainer
-from fixer import get_fixer
 
 
 app = FastAPI(title="Snipe Analysis Server", version="0.1.0")
@@ -112,6 +120,26 @@ def analyze(request: AnalyzeRequest) -> dict:
     diagnostics.extend(check_type_mismatch(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_array_bounds(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_function_signatures(buffer_refs, repo_dicts, current_file))
+    # --- New checks (#9-#19) ---
+    diagnostics.extend(check_undefined_symbols(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_variable_shadowing(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_format_strings(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_unused_externs(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_dead_imports(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_return_types(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_unsafe_functions(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_assignment_types(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_arg_types(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    diagnostics.extend(check_struct_access(buffer_refs, buffer_symbols, repo_dicts, current_file))
+    # Deduplicate diagnostics (same file, line, code, message)
+    seen: set[tuple] = set()
+    unique_diagnostics: list[Diagnostic] = []
+    for d in diagnostics:
+        key = (d.file, d.line, d.code, d.message)
+        if key not in seen:
+            seen.add(key)
+            unique_diagnostics.append(d)
+    diagnostics = unique_diagnostics
     log.info("Analyze %s: %d buffer_refs, %d diagnostics", current_file, len(buffer_refs), len(diagnostics))
 
     # Save diagnostics to file for graph error highlighting
