@@ -33,6 +33,7 @@ class Symbol:
     return_type: Optional[str] = None
     is_variadic: bool = False
     is_extern: bool = False
+    members: list[dict[str, Any]] = field(default_factory=list)  # struct members [{name, type}]
 
     def to_dict(self) -> dict:
         return {
@@ -48,18 +49,30 @@ class Symbol:
             "return_type": self.return_type,
             "is_variadic": self.is_variadic,
             "is_extern": self.is_extern,
+            "members": self.members,
         }
 
 
 @dataclass
 class Reference:
     name: str
-    kind: str  # call, read, array_access, array_write
+    kind: str  # call, read, array_access, array_write, import, return_value, format_call, assignment, member_access
     inferred_type: Optional[str] = None
     line: int = 0
     index_value: Optional[int] = None  # for array[index]
     arg_count: Optional[int] = None  # for function calls
     rhs_name: Optional[str] = None  # for array_write: RHS identifier when inferred_type is None
+    # --- New fields for checks #9-#19 ---
+    format_specifiers: Optional[int] = None      # #12: count of format specifiers in printf
+    format_string: Optional[str] = None           # #12: raw format string for diagnostics
+    imported_names: Optional[list[str]] = None    # #14: names from import statement
+    module_name: Optional[str] = None             # #14: module being imported
+    return_value_type: Optional[str] = None       # #15: inferred type of return expression
+    declared_return_type: Optional[str] = None    # #15: function's declared return type
+    scope: Optional[str] = None                   # #11, #15: enclosing function/class scope
+    annotation_type: Optional[str] = None         # #17: type annotation on LHS of assignment
+    arg_types: Optional[list[Optional[str]]] = None  # #18: inferred types of each call argument
+    member_name: Optional[str] = None             # #19: member being accessed
 
 
 def _get_language(lang_name: str):
@@ -380,31 +393,57 @@ def _extract_c_symbols(source: bytes, file_path: str) -> list[Symbol]:
             )
             decl_list = node.child_by_field_name("declarator") or node.child_by_field_name("init_declarator_list")
             if decl_list:
-                for c in decl_list.children:
-                    if c.type == "init_declarator":
-                        d = c.child_by_field_name("declarator") or c
-                        size = get_array_size_from_declarator(d)
-                        name = _identifier_from_declarator(d, source)
-                        if name:
+                # If declarator is directly an identifier (e.g. "struct Point p;"), handle it
+                if decl_list.type == "identifier":
+                    name = _source_at(decl_list, source).strip()
+                    symbols.append(Symbol(
+                        name=name, kind="variable",
+                        type=type_str, file_path=file_path, line=_line_of(node, source),
+                        scope="", array_size=None, is_extern=is_extern,
+                    ))
+                else:
+                    for c in decl_list.children:
+                        if c.type == "init_declarator":
+                            d = c.child_by_field_name("declarator") or c
+                            size = get_array_size_from_declarator(d)
+                            name = _identifier_from_declarator(d, source)
+                            if name:
+                                symbols.append(Symbol(
+                                    name=name, kind="array" if size is not None else "variable",
+                                    type=type_str, file_path=file_path, line=_line_of(node, source),
+                                    scope="", array_size=size, is_extern=is_extern,
+                                ))
+                        elif c.type == "identifier":
+                            name = _source_at(c, source).strip()
                             symbols.append(Symbol(
-                                name=name, kind="array" if size is not None else "variable",
+                                name=name, kind="variable",
                                 type=type_str, file_path=file_path, line=_line_of(node, source),
-                                scope="", array_size=size, is_extern=is_extern,
+                                scope="", array_size=None, is_extern=is_extern,
                             ))
-                    elif c.type == "identifier":
-                        name = _source_at(c, source).strip()
-                        symbols.append(Symbol(
-                            name=name, kind="variable",
-                            type=type_str, file_path=file_path, line=_line_of(node, source),
-                            scope="", array_size=None, is_extern=is_extern,
-                        ))
         if node.type == "struct_specifier":
             name_node = node.child_by_field_name("name")
             if name_node:
                 name = _source_at(name_node, source).strip()
+                # #19: Extract struct members from body (field_declaration_list)
+                members = []
+                body = node.child_by_field_name("body")
+                if body:
+                    for field_decl in body.children:
+                        if field_decl.type == "field_declaration":
+                            field_type = get_type_str(field_decl)
+                            field_declarator = field_decl.child_by_field_name("declarator")
+                            if field_declarator:
+                                # tree-sitter uses field_identifier for struct members
+                                if field_declarator.type == "field_identifier":
+                                    field_name = _source_at(field_declarator, source).strip()
+                                else:
+                                    field_name = _identifier_from_declarator(field_declarator, source)
+                                if field_name:
+                                    members.append({"name": field_name, "type": field_type})
                 symbols.append(Symbol(
                     name=name, kind="struct", type="struct",
-                    file_path=file_path, line=_line_of(node, source), scope=""
+                    file_path=file_path, line=_line_of(node, source), scope="",
+                    members=members,
                 ))
         for c in node.children:
             walk(c)
@@ -533,15 +572,47 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
             if fn:
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
-                refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
+                arg_children = [c for c in args.children if c.type not in ("(", ")", ",")] if args else []
+                nargs = len(arg_children)
+                # #18: Infer argument types for type checking
+                inferred_arg_types: list[Optional[str]] = []
+                for ac in arg_children:
+                    t = _infer_type_from_rhs(ac)
+                    if t is None and ac.type == "identifier":
+                        t = None  # checker will look up from symbols
+                    inferred_arg_types.append(t)
+                refs.append(Reference(name=name, kind="call", line=_line_of(node, source),
+                                      arg_count=nargs, arg_types=inferred_arg_types if any(t is not None for t in inferred_arg_types) else None))
         if node.type in ("call_expression", "call") and language == "c":
             fn = node.child_by_field_name("function")
             if fn and fn.type == "identifier":
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
+                arg_children = [c for c in args.children if c.type not in ("(", ")", ",")] if args else []
+                nargs = len(arg_children)
                 refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
+                # #12: Format string detection for printf family
+                _PRINTF_FAMILY = {"printf", "fprintf", "sprintf", "snprintf", "scanf", "fscanf", "sscanf"}
+                if name in _PRINTF_FAMILY and arg_children:
+                    fmt_arg_idx = 0
+                    if name in ("fprintf", "fscanf", "sprintf", "sscanf"):
+                        fmt_arg_idx = 1
+                    elif name == "snprintf":
+                        fmt_arg_idx = 2
+                    if fmt_arg_idx < len(arg_children):
+                        fmt_node = arg_children[fmt_arg_idx]
+                        if fmt_node.type == "string_literal":
+                            fmt_str = _source_at(fmt_node, source).strip().strip('"')
+                            specs = re.findall(r'%(?!%)[diouxXeEfFgGaAcspnl*]', fmt_str)
+                            num_specs = len(specs)
+                            actual_fmt_args = nargs - fmt_arg_idx - 1
+                            refs.append(Reference(
+                                name=name, kind="format_call",
+                                line=_line_of(node, source),
+                                arg_count=actual_fmt_args,
+                                format_specifiers=num_specs,
+                                format_string=fmt_str,
+                            ))
         if node.type in ("subscript_expression", "subscript") and language == "python":
             obj = node.child_by_field_name("value")
             idx = node.child_by_field_name("subscript") or node.child_by_field_name("index")
@@ -598,6 +669,118 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
                         name=name, kind="array_write", line=_line_of(node, source),
                         index_value=index_val, inferred_type=rhs_type, rhs_name=rhs_name,
                     ))
+
+        # #14: Python import extraction
+        if node.type == "import_statement" and language == "python":
+            imported = []
+            for c in node.children:
+                if c.type == "dotted_name":
+                    imported.append(_source_at(c, source).strip())
+                elif c.type == "aliased_import":
+                    alias_node = c.child_by_field_name("alias")
+                    name_node = c.child_by_field_name("name")
+                    local = alias_node if alias_node else name_node
+                    if local:
+                        imported.append(_source_at(local, source).strip())
+            if imported:
+                refs.append(Reference(
+                    name="__import__", kind="import",
+                    line=_line_of(node, source),
+                    imported_names=imported,
+                ))
+
+        if node.type == "import_from_statement" and language == "python":
+            module_node = node.child_by_field_name("module_name")
+            mod_name = _source_at(module_node, source).strip() if module_node else ""
+            imported = []
+            for c in node.children:
+                if c.type == "dotted_name" and c != module_node:
+                    imported.append(_source_at(c, source).strip())
+                elif c.type == "aliased_import":
+                    alias_node = c.child_by_field_name("alias")
+                    name_node = c.child_by_field_name("name")
+                    local = alias_node if alias_node else name_node
+                    if local:
+                        imported.append(_source_at(local, source).strip())
+                elif c.type == "identifier" and c != module_node:
+                    imported.append(_source_at(c, source).strip())
+            if imported:
+                refs.append(Reference(
+                    name="__import__", kind="import",
+                    line=_line_of(node, source),
+                    imported_names=imported,
+                    module_name=mod_name,
+                ))
+
+        # #15: Python return statement extraction
+        if node.type == "return_statement" and language == "python":
+            parent = node.parent
+            func_name = ""
+            declared_ret = None
+            while parent:
+                if parent.type == "function_definition":
+                    name_node = parent.child_by_field_name("name")
+                    if name_node:
+                        func_name = _source_at(name_node, source).strip()
+                    ret_node = parent.child_by_field_name("return_type")
+                    if ret_node:
+                        declared_ret = _get_python_type_annotation(ret_node, source)
+                    break
+                parent = parent.parent
+            ret_value = None
+            for c in node.children:
+                if c.type != "return":
+                    ret_value = c
+                    break
+            ret_type = None
+            if ret_value:
+                ret_type = _infer_type_from_rhs(ret_value)
+            else:
+                ret_type = "None"
+            if declared_ret:
+                refs.append(Reference(
+                    name=func_name, kind="return_value",
+                    line=_line_of(node, source),
+                    return_value_type=ret_type,
+                    declared_return_type=declared_ret,
+                    scope=func_name,
+                ))
+
+        # #17: Python annotated assignment type tracking
+        if node.type == "assignment" and language == "python":
+            type_node = node.child_by_field_name("type")
+            if type_node:
+                annotation = _get_python_type_annotation(type_node, source)
+                rhs_node = node.child_by_field_name("right") or (
+                    node.children[-1] if len(node.children) >= 3 else None)
+                rhs_type = _infer_type_from_rhs(rhs_node) if rhs_node else None
+                lhs_node = None
+                for c in node.children:
+                    if c.type == "identifier":
+                        lhs_node = c
+                        break
+                if lhs_node and annotation and rhs_type:
+                    refs.append(Reference(
+                        name=_source_at(lhs_node, source).strip(),
+                        kind="assignment",
+                        line=_line_of(node, source),
+                        annotation_type=annotation,
+                        inferred_type=rhs_type,
+                    ))
+
+        # #19: C struct member access (field_expression: obj.member or ptr->member)
+        if node.type == "field_expression" and language == "c":
+            obj = node.child_by_field_name("argument")
+            field_node = node.child_by_field_name("field")
+            if obj and field_node:
+                obj_name = _source_at(obj, source).strip()
+                field_name = _source_at(field_node, source).strip()
+                refs.append(Reference(
+                    name=obj_name, kind="member_access",
+                    line=_line_of(node, source),
+                    member_name=field_name,
+                ))
+
         for c in node.children:
             walk(c)
 

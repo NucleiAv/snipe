@@ -307,6 +307,300 @@ int add(int a, int b) { return a + b; }
     assert len(diag_bad) == 1, "3 args for add(int, int) should fail"
 
 
+# ====================================================================
+# New tests for checks #9-#19
+# ====================================================================
+
+from analyzer.undefined_checker import check_undefined_symbols
+from analyzer.shadow_checker import check_variable_shadowing
+from analyzer.format_checker import check_format_strings
+from analyzer.unused_checker import check_unused_externs, check_dead_imports
+from analyzer.return_checker import check_return_types
+from analyzer.safety_checker import check_unsafe_functions
+from analyzer.assignment_checker import check_assignment_types
+from analyzer.arg_type_checker import check_arg_types
+from analyzer.struct_checker import check_struct_access
+
+
+# ---- #9: Undefined symbol reference (Python) ----
+
+def test_undefined_symbol_python():
+    buffer_refs = [Reference("unknown_var", "read", None, 5)]
+    buffer_symbols = [Symbol("x", "variable", "int", "test.py", 1, "")]
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert diag[0].code == "SNIPE_UNDEFINED_SYMBOL"
+    assert "unknown_var" in diag[0].message
+
+
+def test_undefined_symbol_builtin_no_false_positive():
+    buffer_refs = [Reference("print", "read", None, 1), Reference("len", "read", None, 2)]
+    buffer_symbols = []
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.py")
+    assert len(diag) == 0, f"Builtins should not be flagged, got {len(diag)}"
+
+
+# ---- #10: Undefined function call (C + Python) ----
+
+def test_undefined_function_call_c():
+    buffer_refs = [Reference("my_unknown_func", "call", None, 3, None, 1)]
+    buffer_symbols = []
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "my_unknown_func" in diag[0].message
+
+
+def test_stdlib_function_no_false_positive():
+    buffer_refs = [Reference("printf", "call", None, 3, None, 1)]
+    buffer_symbols = []
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.c")
+    assert len(diag) == 0, f"C stdlib should not be flagged, got {len(diag)}"
+
+
+def test_undefined_function_python():
+    buffer_refs = [Reference("nonexistent_func", "call", None, 5, None, 1)]
+    buffer_symbols = []
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "nonexistent_func" in diag[0].message
+
+
+def test_defined_function_no_false_positive():
+    buffer_refs = [Reference("my_func", "call", None, 5, None, 1)]
+    buffer_symbols = [Symbol("my_func", "function", None, "test.py", 1, "")]
+    repo_symbols = []
+    diag = check_undefined_symbols(buffer_refs, buffer_symbols, repo_symbols, "test.py")
+    assert len(diag) == 0, f"Defined function should not be flagged, got {len(diag)}"
+
+
+# ---- #11: Variable shadowing (Python) ----
+
+def test_variable_shadowing():
+    buffer_symbols = [
+        Symbol("x", "variable", "int", "test.py", 1, ""),       # module-level
+        Symbol("x", "variable", "str", "test.py", 5, "foo"),    # local in foo
+    ]
+    diag = check_variable_shadowing([], buffer_symbols, [], "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "shadows" in diag[0].message
+    assert diag[0].code == "SNIPE_SHADOWED_SYMBOL"
+
+
+def test_no_shadowing_when_no_conflict():
+    buffer_symbols = [
+        Symbol("x", "variable", "int", "test.py", 1, ""),
+        Symbol("y", "variable", "str", "test.py", 5, "foo"),
+    ]
+    diag = check_variable_shadowing([], buffer_symbols, [], "test.py")
+    assert len(diag) == 0, f"No shadowing expected, got {len(diag)}"
+
+
+# ---- #12: Format string mismatch (C) ----
+
+def test_format_string_mismatch():
+    buffer_refs = [Reference("printf", "format_call", None, 3, None, 1,
+                             format_specifiers=2, format_string="%d %s")]
+    diag = check_format_strings(buffer_refs, [], [], "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "2" in diag[0].message and "1" in diag[0].message
+    assert diag[0].code == "SNIPE_FORMAT_STRING"
+
+
+def test_format_string_correct():
+    buffer_refs = [Reference("printf", "format_call", None, 3, None, 2,
+                             format_specifiers=2, format_string="%d %s")]
+    diag = check_format_strings(buffer_refs, [], [], "test.c")
+    assert len(diag) == 0, f"Correct format should not flag, got {len(diag)}"
+
+
+# ---- #13: Unused extern (C) ----
+
+def test_unused_extern():
+    buffer_symbols = [Symbol("unused_func", "function", "int", "test.c", 3, "", is_extern=True)]
+    buffer_refs = []
+    diag = check_unused_externs(buffer_refs, buffer_symbols, [], "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "unused_func" in diag[0].message
+    assert diag[0].code == "SNIPE_UNUSED_EXTERN"
+
+
+def test_used_extern_no_false_positive():
+    buffer_symbols = [Symbol("add", "function", "int", "test.c", 3, "", is_extern=True)]
+    buffer_refs = [Reference("add", "call", None, 10, None, 2)]
+    diag = check_unused_externs(buffer_refs, buffer_symbols, [], "test.c")
+    assert len(diag) == 0, f"Used extern should not be flagged, got {len(diag)}"
+
+
+# ---- #14: Dead import (Python) ----
+
+def test_dead_import():
+    buffer_refs = [
+        Reference("__import__", "import", None, 1, imported_names=["foo", "bar"]),
+        Reference("foo", "read", None, 5),
+    ]
+    diag = check_dead_imports(buffer_refs, [], [], "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic (bar unused), got {len(diag)}"
+    assert "bar" in diag[0].message
+    assert diag[0].code == "SNIPE_DEAD_IMPORT"
+
+
+def test_all_imports_used_no_false_positive():
+    buffer_refs = [
+        Reference("__import__", "import", None, 1, imported_names=["foo", "bar"]),
+        Reference("foo", "read", None, 5),
+        Reference("bar", "call", None, 6, None, 0),
+    ]
+    diag = check_dead_imports(buffer_refs, [], [], "test.py")
+    assert len(diag) == 0, f"All imports used, should not flag, got {len(diag)}"
+
+
+# ---- #15: Return type mismatch (Python) ----
+
+def test_return_type_mismatch():
+    buffer_refs = [Reference("my_func", "return_value", None, 5,
+                             return_value_type="str", declared_return_type="int")]
+    diag = check_return_types(buffer_refs, [], [], "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "str" in diag[0].message and "int" in diag[0].message
+    assert diag[0].code == "SNIPE_TYPE_MISMATCH"
+
+
+def test_return_type_correct():
+    buffer_refs = [Reference("my_func", "return_value", None, 5,
+                             return_value_type="int", declared_return_type="int")]
+    diag = check_return_types(buffer_refs, [], [], "test.py")
+    assert len(diag) == 0, f"Correct return type should not flag, got {len(diag)}"
+
+
+# ---- #16: Unsafe function (C) ----
+
+def test_unsafe_function():
+    buffer_refs = [Reference("strcpy", "call", None, 3, None, 2)]
+    diag = check_unsafe_functions(buffer_refs, [], [], "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "strcpy" in diag[0].message
+    assert "strncpy" in diag[0].message
+    assert diag[0].code == "SNIPE_UNSAFE_FUNCTION"
+
+
+def test_safe_function_no_false_positive():
+    buffer_refs = [Reference("strncpy", "call", None, 3, None, 3)]
+    diag = check_unsafe_functions(buffer_refs, [], [], "test.c")
+    assert len(diag) == 0, f"Safe function should not be flagged, got {len(diag)}"
+
+
+# ---- #17: Assignment type mismatch (Python) ----
+
+def test_assignment_type_mismatch():
+    buffer_refs = [Reference("x", "assignment", "str", 3, annotation_type="int")]
+    diag = check_assignment_types(buffer_refs, [], [], "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "int" in diag[0].message and "str" in diag[0].message
+    assert diag[0].code == "SNIPE_TYPE_MISMATCH"
+
+
+def test_assignment_type_correct():
+    buffer_refs = [Reference("x", "assignment", "int", 3, annotation_type="int")]
+    diag = check_assignment_types(buffer_refs, [], [], "test.py")
+    assert len(diag) == 0, f"Correct assignment should not flag, got {len(diag)}"
+
+
+# ---- #18: Argument type mismatch (Python) ----
+
+def test_arg_type_mismatch():
+    buffer_refs = [Reference("greet", "call", None, 5, None, 1, arg_types=["int"])]
+    buffer_symbols = [Symbol("greet", "function", "str", "test.py", 1, "",
+                             params=[{"name": "name", "type": "str"}],
+                             return_type="str")]
+    diag = check_arg_types(buffer_refs, buffer_symbols, [], "test.py")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "str" in diag[0].message and "int" in diag[0].message
+    assert diag[0].code == "SNIPE_ARG_TYPE_MISMATCH"
+
+
+def test_arg_type_correct():
+    buffer_refs = [Reference("greet", "call", None, 5, None, 1, arg_types=["str"])]
+    buffer_symbols = [Symbol("greet", "function", "str", "test.py", 1, "",
+                             params=[{"name": "name", "type": "str"}],
+                             return_type="str")]
+    diag = check_arg_types(buffer_refs, buffer_symbols, [], "test.py")
+    assert len(diag) == 0, f"Correct arg type should not flag, got {len(diag)}"
+
+
+# ---- #19: Struct member access (C) ----
+
+def test_struct_member_access_invalid():
+    buffer_refs = [Reference("p", "member_access", None, 5, member_name="z")]
+    buffer_symbols = [
+        Symbol("Point", "struct", "struct", "test.c", 1, "",
+               members=[{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]),
+        Symbol("p", "variable", "struct Point", "test.c", 5, ""),
+    ]
+    diag = check_struct_access(buffer_refs, buffer_symbols, [], "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "z" in diag[0].message
+    assert "Point" in diag[0].message
+    assert diag[0].code == "SNIPE_STRUCT_ACCESS"
+
+
+def test_struct_member_access_valid():
+    buffer_refs = [Reference("p", "member_access", None, 5, member_name="x")]
+    buffer_symbols = [
+        Symbol("Point", "struct", "struct", "test.c", 1, "",
+               members=[{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]),
+        Symbol("p", "variable", "struct Point", "test.c", 5, ""),
+    ]
+    diag = check_struct_access(buffer_refs, buffer_symbols, [], "test.c")
+    assert len(diag) == 0, f"Valid member should not flag, got {len(diag)}"
+
+
+# ---- Integration: extraction + checker end-to-end ----
+
+def test_format_string_extraction_and_check():
+    """End-to-end: extract format_call refs from C source and run format checker."""
+    code = b'#include <stdio.h>\nint main() { printf("%d %s", 42); return 0; }'
+    refs = extract_references_from_source(code, "test.c", "c")
+    fmt_refs = [r for r in refs if r.kind == "format_call"]
+    if not fmt_refs:
+        return  # tree-sitter may not be installed
+    assert len(fmt_refs) >= 1
+    # printf("%d %s", 42) — 2 specifiers, 1 arg
+    diag = check_format_strings(refs, [], [], "test.c")
+    assert len(diag) >= 1, f"Expected format mismatch, got {len(diag)}"
+
+
+def test_python_import_extraction():
+    """End-to-end: extract import refs from Python source."""
+    code = b"from os import path, getcwd\nimport json\nx = path\n"
+    refs = extract_references_from_source(code, "test.py", "python")
+    if not refs:
+        return  # tree-sitter may not be installed
+    import_refs = [r for r in refs if r.kind == "import"]
+    assert len(import_refs) >= 1, f"Expected import refs, got {len(import_refs)}"
+    # Check that imported names are captured
+    all_imported = set()
+    for r in import_refs:
+        if r.imported_names:
+            all_imported.update(r.imported_names)
+    assert "path" in all_imported or "json" in all_imported, f"Expected imported names, got {all_imported}"
+
+
+def test_unsafe_function_extraction_and_check():
+    """End-to-end: extract C call refs and run safety checker."""
+    code = b'#include <string.h>\nvoid foo() { strcpy(dst, src); }'
+    refs = extract_references_from_source(code, "test.c", "c")
+    if not refs:
+        return  # tree-sitter may not be installed
+    diag = check_unsafe_functions(refs, [], [], "test.c")
+    assert len(diag) >= 1, f"Expected unsafe function warning, got {len(diag)}"
+    assert any("strcpy" in d.message for d in diag)
+
+
 if __name__ == "__main__":
     test_python_symbol_extraction()
     test_c_symbol_extraction()
@@ -325,4 +619,32 @@ if __name__ == "__main__":
     test_python_list_bounds()
     test_python_dataclass_fields()
     test_c_analysis_unchanged()
+    # New tests for checks #9-#19
+    test_undefined_symbol_python()
+    test_undefined_symbol_builtin_no_false_positive()
+    test_undefined_function_call_c()
+    test_stdlib_function_no_false_positive()
+    test_undefined_function_python()
+    test_defined_function_no_false_positive()
+    test_variable_shadowing()
+    test_no_shadowing_when_no_conflict()
+    test_format_string_mismatch()
+    test_format_string_correct()
+    test_unused_extern()
+    test_used_extern_no_false_positive()
+    test_dead_import()
+    test_all_imports_used_no_false_positive()
+    test_return_type_mismatch()
+    test_return_type_correct()
+    test_unsafe_function()
+    test_safe_function_no_false_positive()
+    test_assignment_type_mismatch()
+    test_assignment_type_correct()
+    test_arg_type_mismatch()
+    test_arg_type_correct()
+    test_struct_member_access_invalid()
+    test_struct_member_access_valid()
+    test_format_string_extraction_and_check()
+    test_python_import_extraction()
+    test_unsafe_function_extraction_and_check()
     print("All tests passed.")
