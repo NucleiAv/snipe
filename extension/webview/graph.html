@@ -9,7 +9,7 @@
          { nodes: [...], links: [...], workspacePath: "..." }
     3. D3.js v7 builds a force-directed simulation from that data.
     4. Node shapes are determined by node.kind:
-         "file"     → rounded rectangle (#CD5C5C brown, or red if hasErrors)
+         "file"     → rounded rectangle (color by extension, or red if hasErrors)
          "function" → circle            (#61AFEF blue,  or red if hasErrors)
          "variable" → square            (#98C379 green, or red if hasErrors)
          "array"    → diamond (rotated square, #E5C07B orange, or red if hasErrors)
@@ -17,6 +17,7 @@
        the file at the correct line in the main editor column.
     6. workspacePath is prepended to relative file_path values so that
        click-to-navigate works regardless of how the parser stored the path.
+    7. Double-clicking a file node collapses/expands its child symbols.
 
   Security:
     A Content Security Policy is injected by graphPanel.ts at load time
@@ -113,7 +114,7 @@
     }
 
     .link-BELONGS_TO {
-      stroke: #666666;
+      stroke: #C678DD;
       stroke-width: 1px;
     }
 
@@ -153,9 +154,10 @@
       z-index: 100;
     }
 
+    /* Legend moved below controls */
     #legend {
       position: fixed;
-      top: 10px;
+      top: 210px;
       right: 20px;
       background: rgba(30, 30, 30, 0.95);
       padding: 15px;
@@ -196,6 +198,80 @@
       font-size: 16px;
       text-align: center;
     }
+
+    /* Control panel */
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(30, 30, 30, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      font-size: 12px;
+      z-index: 1000;
+      min-width: 200px;
+    }
+
+    #controls h4 {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      color: #e1e1e1;
+      border-bottom: 1px solid #444;
+      padding-bottom: 6px;
+    }
+
+    #controls label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 6px 0;
+      cursor: pointer;
+      color: #cccccc;
+    }
+
+    #controls label:hover {
+      color: #ffffff;
+    }
+
+    #controls input[type="checkbox"] {
+      accent-color: #61AFEF;
+    }
+
+    #searchBox {
+      width: 100%;
+      margin-top: 10px;
+      padding: 5px 8px;
+      background: #2d2d2d;
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: #cccccc;
+      font-size: 11px;
+      box-sizing: border-box;
+    }
+
+    #searchBox::placeholder {
+      color: #777;
+    }
+
+    #searchBox:focus {
+      outline: none;
+      border-color: #61AFEF;
+    }
+
+    /* Collapse badge */
+    .collapse-badge {
+      fill: #E5C07B;
+      stroke: #1e1e1e;
+      stroke-width: 1px;
+    }
+
+    .collapse-badge-text {
+      fill: #1e1e1e;
+      font-size: 9px;
+      font-weight: bold;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -203,11 +279,31 @@
     <div id="loading">Loading graph...</div>
     <div id="error" style="display: none;"></div>
     <div id="stats" style="display: none;"></div>
+
+    <!-- Control Panel (Part 2 + Part 4) -->
+    <div id="controls">
+      <h4>Filters</h4>
+      <label><input type="checkbox" id="filterErrors"> Show only errors</label>
+      <label><input type="checkbox" id="filterCurrentFile"> Current file + dependencies only</label>
+      <label><input type="checkbox" id="hideVariables"> Hide variables</label>
+      <label><input type="checkbox" id="filterFunctions"> Show only functions</label>
+      <input type="text" id="searchBox" placeholder="Search nodes...">
+    </div>
+
+    <!-- Legend (Parts 1) -->
     <div id="legend" style="display: block;">
       <div style="font-weight: bold; margin-bottom: 8px;">Node Types</div>
       <div class="legend-item">
+        <div class="legend-shape" style="background: #CD5C5C; width: 10px; height: 10px; border-radius: 3px;"></div>
+        <span>Error files</span>
+      </div>
+      <div class="legend-item">
         <div class="legend-shape" style="background: #FFD700; width: 10px; height: 10px; border-radius: 3px;"></div>
-        <span>File (Rectangle)</span>
+        <span>C files (.c)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-shape" style="background: #1E3A8A; width: 10px; height: 10px; border-radius: 3px;"></div>
+        <span>Python files (.py)</span>
       </div>
       <div class="legend-item">
         <div class="legend-shape" style="background: #61AFEF; width: 10px; height: 10px; border-radius: 50%;"></div>
@@ -223,7 +319,7 @@
       </div>
       <div style="font-weight: bold; margin: 12px 0 8px 0;">Relationships</div>
       <div class="legend-item">
-        <div class="legend-line" style="background-color: #666666;"></div>
+        <div class="legend-line" style="background-color: #C678DD;"></div>
         <span>BELONGS_TO</span>
       </div>
       <div class="legend-item">
@@ -234,64 +330,88 @@
         <div class="legend-line" style="background-color: #3498db;"></div>
         <span>REFERENCES</span>
       </div>
-      <div class="legend-item">
-        <div class="legend-line" style="background-color: #9b59b6;"></div>
-        <span>DEFINES</span>
-      </div>
     </div>
   </div>
 
   <script>
     const vscode = acquireVsCodeApi();
 
-    // Color mapping for node types
-    const nodeColors = {
-      'file': '#e74c3c',
-      'function': '#3498db',
-      'variable': '#2ecc71',
-      'array': '#f39c12',
-      'class': '#9b59b6',
-      'struct': '#1abc9c',
-      'default': '#95a5a6'
-    };
+    // ── File-extension color palette ───────────────────────────────────────
+    function getFileColor(node) {
+      if (node.hasErrors) return '#CD5C5C';   // error → red
+      const label = node.label || node.file || '';
+      const ext = label.split('.').pop().toLowerCase();
+      switch (ext) {
+        case 'c':   return '#FFD700';   // .c  → yellow
+        case 'py':  return '#1E3A8A';   // .py → dark navy blue
+        default:    return '#888888';   // everything else → gray
+      }
+    }
 
+    // ── Symbol node colors ─────────────────────────────────────────────────
     function getNodeColor(node) {
-      // Red for nodes with errors
-      if (node.hasErrors) {
-        return '#ff0000';
-      }
-      return nodeColors[node.type] || nodeColors.default;
+      if (node.hasErrors) return '#ff0000';
+      const nodeType = node.kind || node.type || 'default';
+      if (nodeType === 'file') return getFileColor(node);
+      const colorMap = {
+        'function': '#61AFEF',
+        'variable': '#98C379',
+        'array':    '#E5C07B',
+        'class':    '#9b59b6',
+        'struct':   '#1abc9c',
+        'default':  '#ABB2BF'
+      };
+      return colorMap[nodeType] || colorMap.default;
     }
 
-    function getNodeSize(node) {
-      // Return appropriate size for each node type
-      switch(node.type) {
-        case 'file': return { width: 60, height: 40 };
-        case 'function': return { radius: 20 };
-        case 'variable': return { size: 15 };
-        case 'array': return { size: 18 };
-        default: return { radius: 18 };
+    // ── Node radius / size ─────────────────────────────────────────────────
+    // File nodes with errors are 1.5x; everything else is 1x.
+    // Symbol base radius raised to 22 for better legibility.
+    function getNodeRadius(node) {
+      const nodeType = node.kind || node.type || 'default';
+      const baseRadius = nodeType === 'file' ? 27 : 22;
+      if (nodeType === 'file' && node.hasErrors) return baseRadius * 1.5;
+      return baseRadius;
+    }
+
+    // Collision radius used by forceCollide
+    function getBaseCollisionRadius(node) {
+      const nodeType = node.kind || node.type || 'default';
+      switch (nodeType) {
+        case 'file':     return getNodeRadius(node) + 10;
+        case 'function': return 25;
+        case 'variable': return 20;
+        case 'array':    return 22;
+        default:         return 22;
       }
     }
 
-    function getCollisionRadius(node) {
-      // Collision radius for force simulation
-      switch(node.type) {
-        case 'file': return 35;
-        case 'function': return 22;
-        case 'variable': return 18;
-        case 'array': return 20;
-        default: return 20;
-      }
-    }
-
-    // Store workspace path globally
+    // ── State ──────────────────────────────────────────────────────────────
     let workspacePath = '';
+    let allNodes = [];
+    let allLinks = [];
+    let collapsedFiles = new Set();   // Part 5
+    let currentZoomK = 1;             // Part 3
+    let nodeGroupSel;                 // D3 selection
+    let linkSel;                      // D3 selection
+    let badgeSel;                     // D3 selection for collapse badges
+    let simulationRef;
+    let svgRef;
+    let gRef;
+    let zoomRef;
+
+    // ── Filter state ───────────────────────────────────────────────────────
+    const filterState = {
+      filterErrors:       false,
+      filterCurrentFile:  false,
+      hideVariables:      false,
+      filterFunctions:    false,
+      searchText:         ''
+    };
 
     // Listen for messages from extension
     window.addEventListener('message', event => {
       const message = event.data;
-
       if (message.type === 'graphData') {
         workspacePath = message.workspacePath || '';
         renderGraph(message.data);
@@ -306,32 +426,206 @@
       document.getElementById('error').textContent = message;
     }
 
+    // ── Wire up controls (Part 2 + Part 4) ────────────────────────────────
+    function wireControls() {
+      ['filterErrors', 'filterCurrentFile', 'hideVariables', 'filterFunctions'].forEach(id => {
+        document.getElementById(id).addEventListener('change', e => {
+          filterState[id] = e.target.checked;
+          applyFilters();
+        });
+      });
+
+      document.getElementById('searchBox').addEventListener('input', e => {
+        filterState.searchText = e.target.value.trim().toLowerCase();
+        applyFilters();
+      });
+    }
+
+    // ── Determine which nodes are visible given current filters ────────────
+    function getVisibleNodeIds(nodes, links) {
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+      // Build adjacency for "current file + dependencies" filter
+      const neighborMap = new Map();
+      links.forEach(l => {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source;
+        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        if (!neighborMap.has(sid)) neighborMap.set(sid, new Set());
+        if (!neighborMap.has(tid)) neighborMap.set(tid, new Set());
+        neighborMap.get(sid).add(tid);
+        neighborMap.get(tid).add(sid);
+      });
+
+      // Error node ids
+      const errorNodeIds = new Set(nodes.filter(n => n.hasErrors).map(n => n.id));
+      // Nodes connected to error nodes
+      const errorAdjacentIds = new Set();
+      if (filterState.filterErrors) {
+        errorNodeIds.forEach(eid => {
+          const nbrs = neighborMap.get(eid) || new Set();
+          nbrs.forEach(nid => errorAdjacentIds.add(nid));
+        });
+      }
+
+      // Current file: first file node (or we could track it)
+      let currentFileId = null;
+      if (filterState.filterCurrentFile) {
+        const fileNodes = nodes.filter(n => (n.kind || n.type) === 'file');
+        if (fileNodes.length > 0) currentFileId = fileNodes[0].id;
+      }
+
+      let visibleIds = new Set();
+
+      nodes.forEach(n => {
+        const nodeType = n.kind || n.type || '';
+
+        // Part 5: collapsed children hidden
+        if (nodeType !== 'file') {
+          // find parent file via BELONGS_TO
+          const parentFileId = findParentFileId(n, links, nodeMap);
+          if (parentFileId && collapsedFiles.has(parentFileId)) return;
+        }
+
+        // Part 3: zoom-based hiding of symbols
+        if (currentZoomK < 0.3 && nodeType !== 'file') return;
+
+        // Part 2: filterErrors
+        if (filterState.filterErrors) {
+          if (!errorNodeIds.has(n.id) && !errorAdjacentIds.has(n.id)) return;
+        }
+
+        // Part 2: filterCurrentFile
+        if (filterState.filterCurrentFile && currentFileId) {
+          const nbrs = neighborMap.get(currentFileId) || new Set();
+          if (n.id !== currentFileId && !nbrs.has(n.id)) return;
+        }
+
+        // Part 2: hideVariables
+        if (filterState.hideVariables && (nodeType === 'variable' || nodeType === 'array')) return;
+
+        // Part 1: filterFunctions — only show function and file nodes
+        if (filterState.filterFunctions && nodeType !== 'function' && nodeType !== 'file') return;
+
+        visibleIds.add(n.id);
+      });
+
+      return visibleIds;
+    }
+
+    function findParentFileId(node, links, nodeMap) {
+      for (const l of links) {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source;
+        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        const rel = l.relationship;
+        // BELONGS_TO: source is symbol, target is file
+        if (rel === 'BELONGS_TO') {
+          if (sid === node.id) {
+            const target = nodeMap.get(tid);
+            if (target && (target.kind || target.type) === 'file') return tid;
+          }
+        }
+      }
+      return null;
+    }
+
+    // ── Apply visibility + search highlights ──────────────────────────────
+    function applyFilters() {
+      if (!nodeGroupSel) return;
+
+      const visibleIds = getVisibleNodeIds(allNodes, allLinks);
+      const searchText = filterState.searchText;
+
+      nodeGroupSel.each(function(d) {
+        const visible = visibleIds.has(d.id);
+        d3.select(this).style('display', visible ? null : 'none');
+
+        if (!visible) return;
+
+        // Part 4: search highlight
+        const shape = d3.select(this).select('.node');
+        if (searchText) {
+          const label = (d.label || '').toLowerCase();
+          if (label.includes(searchText)) {
+            // Highlight match
+            shape.attr('stroke', '#FFD700').attr('stroke-width', 3);
+            d3.select(this).style('opacity', 1);
+          } else {
+            // Dim non-matching
+            shape.attr('stroke', '#fff').attr('stroke-width', null);
+            d3.select(this).style('opacity', 0.2);
+          }
+        } else {
+          // Restore defaults
+          const nodeType = d.kind || d.type || '';
+          if (nodeType === 'file') {
+            shape.attr('stroke', '#fff').attr('stroke-width', 3);
+          } else {
+            shape.attr('stroke', '#fff').attr('stroke-width', 1.5);
+          }
+          d3.select(this).style('opacity', 1);
+        }
+      });
+
+      // Hide links where either endpoint is hidden
+      if (linkSel) {
+        linkSel.style('display', d => {
+          const sid = typeof d.source === 'object' ? d.source.id : d.source;
+          const tid = typeof d.target === 'object' ? d.target.id : d.target;
+          return (visibleIds.has(sid) && visibleIds.has(tid)) ? null : 'none';
+        });
+      }
+
+      // Update collapse badges visibility
+      updateBadges();
+    }
+
+    // ── Update collapse badges (Part 5) ───────────────────────────────────
+    function updateBadges() {
+      if (!badgeSel) return;
+      badgeSel.style('display', d => {
+        return collapsedFiles.has(d.id) ? null : 'none';
+      });
+
+      // Update badge count text
+      badgeSel.select('.collapse-badge-text').text(d => {
+        if (!collapsedFiles.has(d.id)) return '';
+        // Count hidden children
+        const hiddenCount = allLinks.filter(l => {
+          const sid = typeof l.source === 'object' ? l.source.id : l.source;
+          const tid = typeof l.target === 'object' ? l.target.id : l.target;
+          if (l.relationship !== 'BELONGS_TO') return false;
+          return sid !== d.id && tid === d.id; // child node
+        }).length;
+        return `+${hiddenCount}`;
+      });
+    }
+
+    // ── Render graph ───────────────────────────────────────────────────────
     function renderGraph(data) {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('stats').style.display = 'block';
       document.getElementById('legend').style.display = 'block';
 
-      const nodes = data.nodes || [];
-      const links = data.links || [];
+      allNodes = data.nodes || [];
+      allLinks = data.links || [];
 
-      if (nodes.length === 0) {
+      if (allNodes.length === 0) {
         showError('No nodes in graph. Run "Snipe: Refresh Repository Symbols" first.');
         return;
       }
 
       // Update stats
-      const fileNodes = nodes.filter(n => n.type === 'file' || n.kind === 'file').length;
-      const symbolNodes = nodes.length - fileNodes;
+      const fileNodes = allNodes.filter(n => n.type === 'file' || n.kind === 'file').length;
+      const symbolNodes = allNodes.length - fileNodes;
       document.getElementById('stats').innerHTML = `
         <div><strong>Graph Statistics</strong></div>
-        <div>Nodes: ${nodes.length} (${fileNodes} files, ${symbolNodes} symbols)</div>
-        <div>Links: ${links.length}</div>
+        <div>Nodes: ${allNodes.length} (${fileNodes} files, ${symbolNodes} symbols)</div>
+        <div>Links: ${allLinks.length}</div>
       `;
 
-      // Clear old SVG for dynamic updates
+      // Clear old SVG
       d3.select('#graph-container').selectAll('svg').remove();
 
-      // Create SVG
       const container = document.getElementById('graph-container');
       const width = container.clientWidth;
       const height = container.clientHeight;
@@ -341,159 +635,284 @@
         .attr('width', width)
         .attr('height', height);
 
-      // Create zoom behavior
+      svgRef = svg;
       const g = svg.append('g');
+      gRef = g;
 
+      // ── Folder grouping — assign cluster positions to file nodes ──────
+      const folders = new Map();
+      allNodes.forEach(n => {
+        if (n.kind !== 'file') return;
+        const fp = n.file_path || n.file || n.label || '';
+        const parts = fp.split('/');
+        const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
+        if (!folders.has(folder)) folders.set(folder, []);
+        folders.get(folder).push(n);
+      });
+
+      const numFolders = folders.size;
+      const clusterRadius = 300;
+      let folderIndex = 0;
+      folders.forEach((files, folderName) => {
+        const angle = (folderIndex / numFolders) * Math.PI * 2;
+        const clusterX = folderName === 'root' ? width / 2 : width / 2 + Math.cos(angle) * clusterRadius;
+        const clusterY = folderName === 'root' ? height / 2 : height / 2 + Math.sin(angle) * clusterRadius;
+        files.forEach(f => { f.clusterX = clusterX; f.clusterY = clusterY; });
+        folderIndex++;
+      });
+      // Propagate cluster target from file nodes to their symbol children
+      const _nodeMapForCluster = new Map(allNodes.map(n => [n.id, n]));
+      allLinks.forEach(l => {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source;
+        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        if (l.relationship === 'BELONGS_TO') {
+          const sym  = _nodeMapForCluster.get(sid);
+          const file = _nodeMapForCluster.get(tid);
+          if (sym && file) {
+            sym.clusterX = file.clusterX || width / 2;
+            sym.clusterY = file.clusterY || height / 2;
+          }
+        }
+      });
+
+      // ── Zoom — scaleExtent [0.3, 2.5] ─────────────────────────────────
       const zoom = d3.zoom()
-        .scaleExtent([0.1, 10])
+        .scaleExtent([0.3, 2.5])
         .on('zoom', (event) => {
-          g.attr('transform', event.transform);
+          const transform = event.transform;
+          g.attr('transform', transform);
+
+          const newK = transform.k;
+
+          // Issue 3: Inverse scaling for FILE nodes only.
+          // Symbol nodes (circles, squares, diamonds) stay fixed size.
+          const inverseScale = 1 / Math.sqrt(newK);
+
+          nodeGroupSel.each(function(d) {
+            const grp = d3.select(this);
+            const nodeType = d.kind || d.type || 'default';
+
+            if (nodeType === 'file') {
+              // Scale rect and label inversely with zoom
+              const baseR = getNodeRadius(d); // already accounts for hasErrors
+              const w = (d._baseW || baseR * 2) * inverseScale;
+              const h = (d._baseH || baseR * 1.4) * inverseScale;
+              grp.select('rect.node')
+                .attr('width', w).attr('height', h)
+                .attr('x', -w / 2).attr('y', -h / 2);
+              grp.select('text')
+                .attr('font-size', (11 * inverseScale) + 'px');
+            }
+            // Symbol nodes: do NOT rescale — their size stays constant in graph space
+          });
+
+          // Zoom threshold for symbol visibility filter
+          if ((newK < 0.3) !== (currentZoomK < 0.3)) {
+            currentZoomK = newK;
+            applyFilters();
+          } else {
+            currentZoomK = newK;
+          }
         });
 
+      zoomRef = zoom;
       svg.call(zoom);
 
-      // Create force simulation
-      const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links)
+      // ── Force simulation with folder cluster forces ────────────────────
+      const simulation = d3.forceSimulation(allNodes)
+        .force('link', d3.forceLink(allLinks)
           .id(d => d.id)
-          .distance(d => d.relationship === 'BELONGS_TO' ? 60 : 120))
-        .force('charge', d3.forceManyBody()
-          .strength(d => d.type === 'file' ? -800 : -300))
+          .distance(100))
+        .force('charge', d3.forceManyBody().strength(-300))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => getCollisionRadius(d)));
+        .force('collision', d3.forceCollide()
+          .radius(d => getBaseCollisionRadius(d)))
+        .force('clusterX', d3.forceX(d => d.clusterX || width / 2).strength(0.15))
+        .force('clusterY', d3.forceY(d => d.clusterY || height / 2).strength(0.15));
 
-      // Create links
-      const link = g.append('g')
-        .selectAll('line')
-        .data(links)
+      simulationRef = simulation;
+
+      // ── Links ──────────────────────────────────────────────────────────
+      const linkGroup = g.append('g');
+      linkSel = linkGroup.selectAll('line')
+        .data(allLinks)
         .enter()
         .append('line')
         .attr('class', d => `link link-${d.relationship}`)
         .attr('stroke-dasharray', d => d.relationship === 'BELONGS_TO' ? '5,5' : '0');
 
-      // Create node groups
-      const nodeGroup = g.append('g')
-        .selectAll('g')
-        .data(nodes)
+      // ── Node groups ────────────────────────────────────────────────────
+      const nodeContainer = g.append('g');
+      nodeGroupSel = nodeContainer.selectAll('g')
+        .data(allNodes)
         .enter()
         .append('g')
         .attr('class', 'node-group')
         .on('click', (event, d) => {
-          console.log('Clicked node:', d);
-
-          // Build absolute path
-          let absolutePath = d.file || d.file_path || '';
-
-          // If path is relative, prepend workspace path
-          if (!absolutePath.startsWith('/') && workspacePath) {
-            absolutePath = workspacePath + '/' + absolutePath;
+          // Use a 300ms delay to distinguish single-click (navigate) from
+          // double-click (collapse/expand). clearTimeout on dblclick cancels nav.
+          if (d._clickTimer) {
+            clearTimeout(d._clickTimer);
+            d._clickTimer = null;
+            return; // second click within 300ms — let dblclick handler take over
           }
-
-          if (d.type === 'file' || d.kind === 'file') {
-            // FILE NODE: Open the file at line 1
-            console.log('Opening file:', absolutePath);
-            vscode.postMessage({
-              type: 'openFile',
-              file: absolutePath,
-              line: 1
-            });
-          } else if (absolutePath && d.line !== undefined) {
-            // SYMBOL NODE: Open at specific line
-            console.log('Navigating to:', absolutePath, 'line:', d.line);
-            vscode.postMessage({
-              type: 'openFile',
-              file: absolutePath,
-              line: d.line
-            });
+          d._clickTimer = setTimeout(() => {
+            d._clickTimer = null;
+            let absolutePath = d.file || d.file_path || '';
+            if (!absolutePath.startsWith('/') && workspacePath) {
+              absolutePath = workspacePath + '/' + absolutePath;
+            }
+            const nodeType = d.kind || d.type || '';
+            if (nodeType === 'file') {
+              vscode.postMessage({ type: 'openFile', file: absolutePath, line: 1 });
+            } else if (absolutePath && d.line !== undefined) {
+              vscode.postMessage({ type: 'openFile', file: absolutePath, line: d.line });
+            }
+          }, 300);
+        })
+        // Collapse/expand on double-click (cancels the pending single-click nav)
+        .on('dblclick', (event, d) => {
+          event.stopPropagation();
+          if (d._clickTimer) {
+            clearTimeout(d._clickTimer);
+            d._clickTimer = null;
           }
+          const nodeType = d.kind || d.type || '';
+          if (nodeType !== 'file') return;
+
+          if (collapsedFiles.has(d.id)) {
+            collapsedFiles.delete(d.id);
+          } else {
+            collapsedFiles.add(d.id);
+          }
+          applyFilters();
         })
         .call(d3.drag()
           .on('start', dragstarted)
           .on('drag', dragged)
           .on('end', dragended));
 
-      // Add shapes based on node type
-      nodeGroup.each(function(d) {
+      // ── Draw shapes ────────────────────────────────────────────────────
+      // Helper: truncate label to fit inside node
+      function truncateLabel(label, isFile) {
+        if (!label) return '';
+        const maxLen = isFile ? 8 : 6;
+        return label.length > maxLen ? label.substring(0, maxLen) + '...' : label;
+      }
+
+      nodeGroupSel.each(function(d) {
         const group = d3.select(this);
-        const nodeType = d.kind || 'default';
-        const color = getNodeColor(d);
+        const nodeType = d.kind || d.type || 'default';
+        const r = getNodeRadius(d); // simple: 25 for file (37.5 if errors), 15 for symbols
+
+        console.log(`[graph] node="${d.id}" kind="${nodeType}" hasErrors=${d.hasErrors} radius=${r}`);
 
         if (nodeType === 'file') {
-          // File: Rounded rectangle (60x40, rx=8)
+          // File: rounded rect, 2:1.4 aspect ratio, sized from r
+          const w = r * 2;
+          const h = r * 1.4;
+          d._baseW = w; d._baseH = h; // store for zoom inverse scaling
           group.append('rect')
             .attr('class', d.hasErrors ? 'node node-file node-file-error' : 'node node-file')
-            .attr('width', 60)
-            .attr('height', 40)
-            .attr('x', -30)
-            .attr('y', -20)
-            .attr('rx', 8)
-            .attr('fill', d.hasErrors ? '#ff0000' : '#FFD700');
+            .attr('width', w)
+            .attr('height', h)
+            .attr('x', -w / 2)
+            .attr('y', -h / 2)
+            .attr('rx', 6)
+            .attr('fill', getFileColor(d));
+
         } else if (nodeType === 'function') {
-          // Function: Circle (r=20)
           group.append('circle')
             .attr('class', d.hasErrors ? 'node node-function node-error' : 'node node-function')
-            .attr('r', 20)
+            .attr('r', r)
             .attr('fill', d.hasErrors ? '#ff0000' : '#61AFEF');
+
         } else if (nodeType === 'variable') {
-          // Variable: Square (30x30, NOT rotated)
+          const s = r * 1.8;
           group.append('rect')
             .attr('class', d.hasErrors ? 'node node-variable node-error' : 'node node-variable')
-            .attr('width', 30)
-            .attr('height', 30)
-            .attr('x', -15)
-            .attr('y', -15)
+            .attr('width', s).attr('height', s)
+            .attr('x', -s / 2).attr('y', -s / 2)
             .attr('fill', d.hasErrors ? '#ff0000' : '#98C379');
+
         } else if (nodeType === 'array') {
-          // Array: Diamond (30x30 square rotated 45 degrees)
+          const s = r * 2.2 - 2;
           group.append('rect')
             .attr('class', d.hasErrors ? 'node node-array node-error' : 'node node-array')
-            .attr('width', 28)
-            .attr('height', 28)
-            .attr('x', -14)
-            .attr('y', -14)
+            .attr('width', s).attr('height', s)
+            .attr('x', -s / 2).attr('y', -s / 2)
             .attr('transform', 'rotate(45)')
             .attr('fill', d.hasErrors ? '#ff0000' : '#E5C07B');
+
         } else {
-          // Default: circle for other types
           group.append('circle')
             .attr('class', d.hasErrors ? 'node node-error' : 'node')
-            .attr('r', 15)
+            .attr('r', r)
             .attr('fill', d.hasErrors ? '#ff0000' : '#ABB2BF');
         }
 
-        // Add label
+        // Label — centered inside node, regular weight, truncated to fit
+        const isFile = nodeType === 'file';
         group.append('text')
-          .text(d.label)
-          .attr('dy', 35)
+          .attr('class', 'node-label-text')
+          .text(truncateLabel(d.label || d.id, isFile))
           .attr('text-anchor', 'middle')
-          .attr('font-size', '10px')
-          .attr('fill', '#d4d4d4');
+          .attr('dominant-baseline', 'middle')
+          .attr('dy', 0)
+          .attr('font-size', '11px')
+          .attr('font-weight', 'normal')
+          .attr('fill', '#fff')
+          .attr('pointer-events', 'none');
       });
 
-      // Add tooltips
-      nodeGroup.append('title')
+      // ── Collapse badges (Part 5) ───────────────────────────────────────
+      badgeSel = nodeContainer.selectAll('.badge-group')
+        .data(allNodes.filter(n => (n.kind || n.type) === 'file'))
+        .enter()
+        .append('g')
+        .attr('class', 'badge-group')
+        .style('display', 'none')
+        .style('pointer-events', 'none');
+
+      badgeSel.append('circle')
+        .attr('class', 'collapse-badge')
+        .attr('cx', 25)
+        .attr('cy', -18)
+        .attr('r', 9);
+
+      badgeSel.append('text')
+        .attr('class', 'collapse-badge-text')
+        .attr('x', 25)
+        .attr('y', -14)
+        .attr('text-anchor', 'middle');
+
+      // ── Tooltips ───────────────────────────────────────────────────────
+      nodeGroupSel.append('title')
         .text(d => {
           let text = `${d.label} (${d.type || d.kind})`;
           if (d.file) text += `\n${d.file}`;
           if (d.line) text += `:${d.line}`;
           if (d.dataType) text += `\nType: ${d.dataType}`;
           if (d.symbolCount) text += `\nSymbols: ${d.symbolCount}`;
+          if (d.errorCount) text += `\nErrors: ${d.errorCount}`;
           return text;
         });
 
-      // Update positions on tick
+      // ── Tick ───────────────────────────────────────────────────────────
       simulation.on('tick', () => {
-        link
+        linkSel
           .attr('x1', d => d.source.x)
           .attr('y1', d => d.source.y)
           .attr('x2', d => d.target.x)
           .attr('y2', d => d.target.y);
 
-        nodeGroup
-          .attr('transform', d => `translate(${d.x},${d.y})`);
+        nodeGroupSel.attr('transform', d => `translate(${d.x},${d.y})`);
+
+        // Sync badge positions to their file node
+        badgeSel.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
-      // Drag functions
+      // ── Drag ───────────────────────────────────────────────────────────
       function dragstarted(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
@@ -511,23 +930,23 @@
         d.fy = null;
       }
 
-      // Initial zoom to fit
+      // ── Initial zoom-to-fit ────────────────────────────────────────────
       setTimeout(() => {
         const bounds = g.node().getBBox();
-        const fullWidth = bounds.width;
-        const fullHeight = bounds.height;
-        const midX = bounds.x + fullWidth / 2;
-        const midY = bounds.y + fullHeight / 2;
-
-        if (fullWidth > 0 && fullHeight > 0) {
-          const scale = 0.9 * Math.min(width / fullWidth, height / fullHeight);
-          const translate = [width / 2 - scale * midX, height / 2 - scale * midY];
-
+        if (bounds.width > 0 && bounds.height > 0) {
+          const scale = 0.9 * Math.min(width / bounds.width, height / bounds.height);
+          const tx = width / 2 - scale * (bounds.x + bounds.width / 2);
+          const ty = height / 2 - scale * (bounds.y + bounds.height / 2);
           svg.transition()
             .duration(750)
-            .call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+            .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
         }
       }, 1000);
+
+      // Wire controls now that graph is ready
+      wireControls();
+      // Initial filter pass
+      applyFilters();
     }
 
     // Request initial data
