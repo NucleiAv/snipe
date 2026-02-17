@@ -1,0 +1,537 @@
+<!--
+  graph.html — Snipe Repository Graph Visualisation
+  ==================================================
+  Rendered inside a VS Code WebviewPanel by GraphPanel (graphPanel.ts).
+
+  Architecture:
+    1. On DOMContentLoaded, posts "ready" to the extension host.
+    2. The extension responds with a "graphData" message containing:
+         { nodes: [...], links: [...], workspacePath: "..." }
+    3. D3.js v7 builds a force-directed simulation from that data.
+    4. Node shapes are determined by node.kind:
+         "file"     → rounded rectangle (#CD5C5C brown, or red if hasErrors)
+         "function" → circle            (#61AFEF blue,  or red if hasErrors)
+         "variable" → square            (#98C379 green, or red if hasErrors)
+         "array"    → diamond (rotated square, #E5C07B orange, or red if hasErrors)
+    5. Clicking any node posts "openFile" back to the extension, which opens
+       the file at the correct line in the main editor column.
+    6. workspacePath is prepended to relative file_path values so that
+       click-to-navigate works regardless of how the parser stored the path.
+
+  Security:
+    A Content Security Policy is injected by graphPanel.ts at load time
+    to restrict resource loading to d3js.org + unsafe-inline scripts/styles.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snipe Repository Graph</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #1e1e1e;
+      font-family: var(--vscode-font-family, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+      color: #cccccc;
+    }
+
+    #graph-container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    svg:active {
+      cursor: grabbing;
+    }
+
+    .node {
+      cursor: pointer;
+      stroke: #fff;
+    }
+
+    .node-file {
+      stroke-width: 3px;
+    }
+
+    .node-function {
+      stroke-width: 1.5px;
+    }
+
+    .node-variable {
+      stroke-width: 1.5px;
+    }
+
+    .node-array {
+      stroke-width: 1.5px;
+    }
+
+    .node:hover {
+      stroke: #ffcc00;
+      stroke-width: 4px;
+    }
+
+    .node-error {
+      stroke: #ff0000;
+      stroke-width: 3px;
+      filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.6));
+    }
+
+    .node-file-error {
+      fill: #ff0000 !important;
+      stroke: #fff;
+      stroke-width: 3px;
+    }
+
+    .node-label {
+      font-size: 11px;
+      font-weight: 500;
+      pointer-events: none;
+      fill: #cccccc;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+
+    .node-label-file {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .link {
+      stroke-opacity: 0.6;
+      fill: none;
+    }
+
+    .link-BELONGS_TO {
+      stroke: #666666;
+      stroke-width: 1px;
+    }
+
+    .link-CALLS {
+      stroke: #f39c12;
+      stroke-width: 2px;
+    }
+
+    .link-REFERENCES {
+      stroke: #3498db;
+      stroke-width: 1.5px;
+    }
+
+    .link-DEFINES {
+      stroke: #9b59b6;
+      stroke-width: 1.5px;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      color: #cccccc;
+    }
+
+    #stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(30, 30, 30, 0.9);
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 12px;
+      border: 1px solid #444;
+      z-index: 100;
+    }
+
+    #legend {
+      position: fixed;
+      top: 10px;
+      right: 20px;
+      background: rgba(30, 30, 30, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      font-size: 12px;
+      z-index: 1000;
+      display: block;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+    }
+
+    .legend-shape {
+      width: 30px;
+      height: 20px;
+      margin-right: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .legend-line {
+      width: 30px;
+      height: 2px;
+      margin-right: 8px;
+    }
+
+    #error {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #f48771;
+      font-size: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="graph-container">
+    <div id="loading">Loading graph...</div>
+    <div id="error" style="display: none;"></div>
+    <div id="stats" style="display: none;"></div>
+    <div id="legend" style="display: block;">
+      <div style="font-weight: bold; margin-bottom: 8px;">Node Types</div>
+      <div class="legend-item">
+        <div class="legend-shape" style="background: #FFD700; width: 10px; height: 10px; border-radius: 3px;"></div>
+        <span>File (Rectangle)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-shape" style="background: #61AFEF; width: 10px; height: 10px; border-radius: 50%;"></div>
+        <span>Function (Circle)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-shape" style="background: #98C379; width: 10px; height: 10px;"></div>
+        <span>Variable (Square)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-shape" style="background: #E5C07B; width: 8px; height: 8px; transform: rotate(45deg);"></div>
+        <span>Array (Diamond)</span>
+      </div>
+      <div style="font-weight: bold; margin: 12px 0 8px 0;">Relationships</div>
+      <div class="legend-item">
+        <div class="legend-line" style="background-color: #666666;"></div>
+        <span>BELONGS_TO</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background-color: #f39c12;"></div>
+        <span>CALLS</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background-color: #3498db;"></div>
+        <span>REFERENCES</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background-color: #9b59b6;"></div>
+        <span>DEFINES</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+
+    // Color mapping for node types
+    const nodeColors = {
+      'file': '#e74c3c',
+      'function': '#3498db',
+      'variable': '#2ecc71',
+      'array': '#f39c12',
+      'class': '#9b59b6',
+      'struct': '#1abc9c',
+      'default': '#95a5a6'
+    };
+
+    function getNodeColor(node) {
+      // Red for nodes with errors
+      if (node.hasErrors) {
+        return '#ff0000';
+      }
+      return nodeColors[node.type] || nodeColors.default;
+    }
+
+    function getNodeSize(node) {
+      // Return appropriate size for each node type
+      switch(node.type) {
+        case 'file': return { width: 60, height: 40 };
+        case 'function': return { radius: 20 };
+        case 'variable': return { size: 15 };
+        case 'array': return { size: 18 };
+        default: return { radius: 18 };
+      }
+    }
+
+    function getCollisionRadius(node) {
+      // Collision radius for force simulation
+      switch(node.type) {
+        case 'file': return 35;
+        case 'function': return 22;
+        case 'variable': return 18;
+        case 'array': return 20;
+        default: return 20;
+      }
+    }
+
+    // Store workspace path globally
+    let workspacePath = '';
+
+    // Listen for messages from extension
+    window.addEventListener('message', event => {
+      const message = event.data;
+
+      if (message.type === 'graphData') {
+        workspacePath = message.workspacePath || '';
+        renderGraph(message.data);
+      } else if (message.type === 'error') {
+        showError(message.message);
+      }
+    });
+
+    function showError(message) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = message;
+    }
+
+    function renderGraph(data) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('stats').style.display = 'block';
+      document.getElementById('legend').style.display = 'block';
+
+      const nodes = data.nodes || [];
+      const links = data.links || [];
+
+      if (nodes.length === 0) {
+        showError('No nodes in graph. Run "Snipe: Refresh Repository Symbols" first.');
+        return;
+      }
+
+      // Update stats
+      const fileNodes = nodes.filter(n => n.type === 'file' || n.kind === 'file').length;
+      const symbolNodes = nodes.length - fileNodes;
+      document.getElementById('stats').innerHTML = `
+        <div><strong>Graph Statistics</strong></div>
+        <div>Nodes: ${nodes.length} (${fileNodes} files, ${symbolNodes} symbols)</div>
+        <div>Links: ${links.length}</div>
+      `;
+
+      // Clear old SVG for dynamic updates
+      d3.select('#graph-container').selectAll('svg').remove();
+
+      // Create SVG
+      const container = document.getElementById('graph-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      const svg = d3.select('#graph-container')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+      // Create zoom behavior
+      const g = svg.append('g');
+
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 10])
+        .on('zoom', (event) => {
+          g.attr('transform', event.transform);
+        });
+
+      svg.call(zoom);
+
+      // Create force simulation
+      const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links)
+          .id(d => d.id)
+          .distance(d => d.relationship === 'BELONGS_TO' ? 60 : 120))
+        .force('charge', d3.forceManyBody()
+          .strength(d => d.type === 'file' ? -800 : -300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => getCollisionRadius(d)));
+
+      // Create links
+      const link = g.append('g')
+        .selectAll('line')
+        .data(links)
+        .enter()
+        .append('line')
+        .attr('class', d => `link link-${d.relationship}`)
+        .attr('stroke-dasharray', d => d.relationship === 'BELONGS_TO' ? '5,5' : '0');
+
+      // Create node groups
+      const nodeGroup = g.append('g')
+        .selectAll('g')
+        .data(nodes)
+        .enter()
+        .append('g')
+        .attr('class', 'node-group')
+        .on('click', (event, d) => {
+          console.log('Clicked node:', d);
+
+          // Build absolute path
+          let absolutePath = d.file || d.file_path || '';
+
+          // If path is relative, prepend workspace path
+          if (!absolutePath.startsWith('/') && workspacePath) {
+            absolutePath = workspacePath + '/' + absolutePath;
+          }
+
+          if (d.type === 'file' || d.kind === 'file') {
+            // FILE NODE: Open the file at line 1
+            console.log('Opening file:', absolutePath);
+            vscode.postMessage({
+              type: 'openFile',
+              file: absolutePath,
+              line: 1
+            });
+          } else if (absolutePath && d.line !== undefined) {
+            // SYMBOL NODE: Open at specific line
+            console.log('Navigating to:', absolutePath, 'line:', d.line);
+            vscode.postMessage({
+              type: 'openFile',
+              file: absolutePath,
+              line: d.line
+            });
+          }
+        })
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended));
+
+      // Add shapes based on node type
+      nodeGroup.each(function(d) {
+        const group = d3.select(this);
+        const nodeType = d.kind || 'default';
+        const color = getNodeColor(d);
+
+        if (nodeType === 'file') {
+          // File: Rounded rectangle (60x40, rx=8)
+          group.append('rect')
+            .attr('class', d.hasErrors ? 'node node-file node-file-error' : 'node node-file')
+            .attr('width', 60)
+            .attr('height', 40)
+            .attr('x', -30)
+            .attr('y', -20)
+            .attr('rx', 8)
+            .attr('fill', d.hasErrors ? '#ff0000' : '#FFD700');
+        } else if (nodeType === 'function') {
+          // Function: Circle (r=20)
+          group.append('circle')
+            .attr('class', d.hasErrors ? 'node node-function node-error' : 'node node-function')
+            .attr('r', 20)
+            .attr('fill', d.hasErrors ? '#ff0000' : '#61AFEF');
+        } else if (nodeType === 'variable') {
+          // Variable: Square (30x30, NOT rotated)
+          group.append('rect')
+            .attr('class', d.hasErrors ? 'node node-variable node-error' : 'node node-variable')
+            .attr('width', 30)
+            .attr('height', 30)
+            .attr('x', -15)
+            .attr('y', -15)
+            .attr('fill', d.hasErrors ? '#ff0000' : '#98C379');
+        } else if (nodeType === 'array') {
+          // Array: Diamond (30x30 square rotated 45 degrees)
+          group.append('rect')
+            .attr('class', d.hasErrors ? 'node node-array node-error' : 'node node-array')
+            .attr('width', 28)
+            .attr('height', 28)
+            .attr('x', -14)
+            .attr('y', -14)
+            .attr('transform', 'rotate(45)')
+            .attr('fill', d.hasErrors ? '#ff0000' : '#E5C07B');
+        } else {
+          // Default: circle for other types
+          group.append('circle')
+            .attr('class', d.hasErrors ? 'node node-error' : 'node')
+            .attr('r', 15)
+            .attr('fill', d.hasErrors ? '#ff0000' : '#ABB2BF');
+        }
+
+        // Add label
+        group.append('text')
+          .text(d.label)
+          .attr('dy', 35)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px')
+          .attr('fill', '#d4d4d4');
+      });
+
+      // Add tooltips
+      nodeGroup.append('title')
+        .text(d => {
+          let text = `${d.label} (${d.type || d.kind})`;
+          if (d.file) text += `\n${d.file}`;
+          if (d.line) text += `:${d.line}`;
+          if (d.dataType) text += `\nType: ${d.dataType}`;
+          if (d.symbolCount) text += `\nSymbols: ${d.symbolCount}`;
+          return text;
+        });
+
+      // Update positions on tick
+      simulation.on('tick', () => {
+        link
+          .attr('x1', d => d.source.x)
+          .attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x)
+          .attr('y2', d => d.target.y);
+
+        nodeGroup
+          .attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+
+      // Drag functions
+      function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      }
+
+      function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+      }
+
+      function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      }
+
+      // Initial zoom to fit
+      setTimeout(() => {
+        const bounds = g.node().getBBox();
+        const fullWidth = bounds.width;
+        const fullHeight = bounds.height;
+        const midX = bounds.x + fullWidth / 2;
+        const midY = bounds.y + fullHeight / 2;
+
+        if (fullWidth > 0 && fullHeight > 0) {
+          const scale = 0.9 * Math.min(width / fullWidth, height / fullHeight);
+          const translate = [width / 2 - scale * midX, height / 2 - scale * midY];
+
+          svg.transition()
+            .duration(750)
+            .call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+        }
+      }, 1000);
+    }
+
+    // Request initial data
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>

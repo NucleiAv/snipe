@@ -1,7 +1,17 @@
+# Core backend dependencies
 fastapi>=0.109.0,<0.115.0
 uvicorn[standard]>=0.27.0,<0.30.0
+pydantic>=2.6.0,<3
+
+# Code parsing (tree-sitter for Python and C)
 tree-sitter>=0.24.0,<0.26.0
 tree-sitter-python>=0.23.0
 tree-sitter-c>=0.23.0
-pydantic>=2.6.0,<3
+
+# Graph analysis (optional — used for NetworkX metrics in repo_graph.py)
 networkx>=3.2.0
+
+# AI explainer / fixer dependencies
+google-genai
+python-dotenv>=1.0.0
+anthropic

@@ -22,6 +22,9 @@ from analyzer.bounds_checker import check_array_bounds
 from analyzer.signature_checker import check_function_signatures
 from analyzer.type_checker import Diagnostic
 from graph.repo_graph import build_repo_graph
+from graph.graph_builder import build_d3_graph
+from explainer import get_explainer
+from fixer import get_fixer
 
 
 app = FastAPI(title="Snipe Analysis Server", version="0.1.0")
@@ -53,54 +56,33 @@ def favicon():
     return Response(status_code=204)
 
 
-class OpenBuffer(BaseModel):
-    content: str
-    file_path: str
-
-
 class AnalyzeRequest(BaseModel):
     content: str
     file_path: str
     repo_path: str
     language: Optional[str] = None
-    open_buffers: Optional[list[OpenBuffer]] = None
 
 
 class RefreshRequest(BaseModel):
     repo_path: str
 
 
-_repo_mtime: float = 0.0  # max mtime of supported files at last index
+class ExplainRequest(BaseModel):
+    diagnostic: dict
+    code_context: str
 
 
-def _max_repo_mtime(repo_path: str) -> float:
-    """Return the max modification time of supported files in the repo."""
-    import os
-    max_mt = 0.0
-    for root, dirs, files in os.walk(repo_path):
-        # Skip ignored dirs in-place
-        dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
-        for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in (".c", ".h", ".py"):
-                try:
-                    mt = os.path.getmtime(os.path.join(root, f))
-                    if mt > max_mt:
-                        max_mt = mt
-                except OSError:
-                    pass
-    return max_mt
+class FixRequest(BaseModel):
+    diagnostic: dict
+    code: str
 
 
-def _ensure_repo_symbols(repo_path: str, force: bool = False) -> list[dict]:
-    global _repo_symbols, _repo_path, _repo_mtime
-    current_mtime = _max_repo_mtime(repo_path)
-    needs_rebuild = force or _repo_path != repo_path or not _repo_symbols or current_mtime > _repo_mtime
-    if needs_rebuild:
+def _ensure_repo_symbols(repo_path: str) -> list[dict]:
+    global _repo_symbols, _repo_path
+    if _repo_path != repo_path or not _repo_symbols:
         _repo_path = repo_path
         _symbols_path.parent.mkdir(parents=True, exist_ok=True)
         _repo_symbols = build_repo_symbol_table(repo_path, output_json_path=_symbols_path)
-        _repo_mtime = current_mtime
     return _repo_symbols
 
 
@@ -127,44 +109,22 @@ def analyze(request: AnalyzeRequest) -> dict:
     current_file = request.file_path
     diagnostics: list[Diagnostic] = []
     repo_dicts = [s if isinstance(s, dict) else s.to_dict() for s in repo_symbols]
-
-    # Overlay unsaved open buffers: re-extract symbols from other editors' content
-    # so cross-file checks use live (unsaved) types, not stale on-disk versions.
-    if request.open_buffers:
-        from parser.symbol_extractor import extract_symbols_from_source
-        # Collect file paths that have live buffers (normalize to relative)
-        overlay_files: set[str] = set()
-        overlay_symbols: list[dict] = []
-        for ob in request.open_buffers:
-            rel = ob.file_path
-            try:
-                rel = str(Path(ob.file_path).relative_to(Path(repo_path)))
-            except (ValueError, TypeError):
-                pass
-            rel = rel.replace("\\", "/")
-            overlay_files.add(rel)
-            syms = extract_symbols_from_source(ob.content.encode("utf-8"), rel)
-            for s in syms:
-                s.file_path = rel
-                overlay_symbols.append(s.to_dict())
-        # Remove repo symbols from overlay files and replace with live ones
-        repo_dicts = [s for s in repo_dicts if s.get("file_path", "").replace("\\", "/") not in overlay_files]
-        repo_dicts.extend(overlay_symbols)
     diagnostics.extend(check_type_mismatch(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_array_bounds(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_function_signatures(buffer_refs, repo_dicts, current_file))
-    # Deduplicate diagnostics (same file, line, code, message)
-    seen: set[tuple] = set()
-    unique_diagnostics: list[Diagnostic] = []
-    for d in diagnostics:
-        key = (d.file, d.line, d.code, d.message)
-        if key not in seen:
-            seen.add(key)
-            unique_diagnostics.append(d)
-    diagnostics = unique_diagnostics
     log.info("Analyze %s: %d buffer_refs, %d diagnostics", current_file, len(buffer_refs), len(diagnostics))
+
+    # Save diagnostics to file for graph error highlighting
+    snipe_dir = Path(repo_path) / ".snipe"
+    snipe_dir.mkdir(exist_ok=True)
+
+    diagnostics_file = snipe_dir / "diagnostics.json"
+    diagnostics_dict = [_diagnostic_to_dict(d) for d in diagnostics]
+    with open(diagnostics_file, 'w') as f:
+        json.dump(diagnostics_dict, f, indent=2)
+
     return {
-        "diagnostics": [_diagnostic_to_dict(d) for d in diagnostics],
+        "diagnostics": diagnostics_dict,
         "file": current_file,
     }
 
@@ -185,6 +145,26 @@ def refresh(request: RefreshRequest) -> dict:
     return {"symbol_count": len(symbols), "repo_path": repo_path}
 
 
+@app.post("/save_diagnostics")
+def save_diagnostics(data: dict) -> dict:
+    """Save combined diagnostics from all open files for graph error highlighting."""
+    repo_path = data.get('repo_path', '')
+    diagnostics = data.get('diagnostics', [])
+
+    if not repo_path or not Path(repo_path).is_dir():
+        raise HTTPException(status_code=400, detail="Invalid repo_path")
+
+    snipe_dir = Path(repo_path) / ".snipe"
+    snipe_dir.mkdir(exist_ok=True)
+
+    diagnostics_file = snipe_dir / "diagnostics.json"
+    with open(diagnostics_file, 'w') as f:
+        json.dump(diagnostics, f, indent=2)
+
+    log.info("Saved %d diagnostics to %s", len(diagnostics), diagnostics_file)
+    return {"saved": len(diagnostics)}
+
+
 @app.get("/symbols")
 def get_symbols(repo_path: str) -> dict:
     """Return current repo symbol table (builds if needed)."""
@@ -196,11 +176,107 @@ def get_symbols(repo_path: str) -> dict:
 
 @app.get("/graph")
 def get_graph(repo_path: str) -> dict:
-    """Return repo knowledge graph (nodes + edges) for visualization."""
+    """
+    Return dynamic repo knowledge graph (nodes + edges) for visualization.
+    Updates in real-time with error highlighting.
+    """
     if not repo_path:
         raise HTTPException(status_code=400, detail="repo_path required")
+
+    # Get current symbols
     symbols = _ensure_repo_symbols(repo_path)
-    return build_repo_graph(symbols)
+
+    # Get current diagnostics for error highlighting
+    diagnostics = []
+    diagnostics_file = Path(repo_path) / ".snipe" / "diagnostics.json"
+    if diagnostics_file.exists():
+        try:
+            diagnostics_text = diagnostics_file.read_text()
+            diagnostics = json.loads(diagnostics_text)
+        except Exception as e:
+            log.warning(f"Failed to load diagnostics: {e}")
+
+    # Build dynamic graph with error highlighting
+    graph_data = build_repo_graph(symbols, diagnostics)
+
+    return graph_data
+
+
+@app.post("/explain")
+def explain_diagnostic(request: ExplainRequest) -> dict:
+    """
+    Generate AI-powered explanation for a diagnostic.
+    Uses Google Gemini to provide clear, actionable explanations.
+    """
+    explainer = get_explainer()
+
+    if not explainer.is_available():
+        return {
+            "explanation": None,
+            "error": "AI explanations not available. Check GOOGLE_API_KEY environment variable."
+        }
+
+    try:
+        explanation = explainer.explain_diagnostic(
+            request.diagnostic,
+            request.code_context
+        )
+
+        if explanation:
+            return {"explanation": explanation}
+        else:
+            return {
+                "explanation": None,
+                "error": "Failed to generate explanation"
+            }
+    except Exception as e:
+        log.error(f"Error in /explain endpoint: {e}")
+        return {
+            "explanation": None,
+            "error": str(e)
+        }
+
+
+@app.post("/fix")
+def fix_code(request: FixRequest) -> dict:
+    """
+    Generate AI-powered code fix for a diagnostic.
+    Uses Claude Sonnet 4 to generate fixed code with explanation.
+    """
+    fixer = get_fixer()
+
+    if not fixer.is_available():
+        return {
+            "fixed_code": None,
+            "explanation": None,
+            "error": "AI code fixes not available. Check ANTHROPIC_API_KEY environment variable."
+        }
+
+    try:
+        result = fixer.generate_fix(
+            request.diagnostic,
+            request.code
+        )
+
+        if result:
+            return {
+                "fixed_code": result.get("fixed_code"),
+                "explanation": result.get("explanation"),
+                "error": None
+            }
+        else:
+            return {
+                "fixed_code": None,
+                "explanation": None,
+                "error": "Failed to generate code fix"
+            }
+    except Exception as e:
+        log.error(f"Error in /fix endpoint: {e}")
+        return {
+            "fixed_code": None,
+            "explanation": None,
+            "error": str(e)
+        }
 
 
 @app.get("/rules")

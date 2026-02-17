@@ -7,13 +7,13 @@
 #include <stdio.h>
 
 extern int arr[10];
-extern float balance;
+extern float bal;
 extern int add(int a, int b);
 extern void process(int count);
 
 int main(void) {
     process(5);
-    int x = arr[1];
+    int x = arr[144];
     printf("%d\n", x);
     return add(1, 2);
 }

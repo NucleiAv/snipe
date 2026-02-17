@@ -11,14 +11,32 @@
   "contributes": {
     "commands": [
       {
-        "command": "snipe.openGraph",
-        "title": "Snipe: Open Repo Knowledge Graph"
+        "command": "snipe.showGraph",
+        "title": "Snipe: Show Repository Graph"
       },
       {
         "command": "snipe.refreshRepo",
         "title": "Snipe: Refresh Repository Symbols"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "snipe-sidebar",
+          "title": "Snipe",
+          "icon": "$(telescope)"
+        }
+      ]
+    },
+    "views": {
+      "snipe-sidebar": [
+        {
+          "type": "webview",
+          "id": "snipe-overview",
+          "name": "Overview"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
