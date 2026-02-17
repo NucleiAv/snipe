@@ -1,8 +1,16 @@
 # Snipe
+![snipe logo](https://github.com/NucleiAv/snipe/blob/main/snipe-logo.png)
 
 Real-time code analysis that detects **cross-file semantic errors**, type inconsistencies, array bound violations, and function signature drift **while you type**—before files are saved—without external security APIs.
 
 **USP:** *"We catch cross-file bugs before you even save your file."*
+
+---
+Software Milestone and SRS - [snipe software docs](https://github.com/NucleiAv/snipe/blob/main/live_repo_aware_semantic_guardian_sdp_and_srs.md)
+
+Contributors must read - [snipe contributions doc](https://github.com/NucleiAv/snipe/blob/main/CONTRIBUTING.md)
+
+Comparison of snipe with other exisitng tools - [snipe vs others](https://github.com/NucleiAv/snipe/blob/main/snipe_VS_other.md)
 
 ---
 
@@ -136,6 +144,47 @@ echo 'export PATH="$HOME/node-v20.18.0-linux-x64/bin:$PATH"' >> ~/.zshrc
 - **app.py** – `greet("X", "Hi", "extra")` and `compute(1, 2)` → signature drift.
 - **utils.py** / **core.c** – `balance` as int vs float for cross-file type demo.
 
+## Output
+
+The terminal ouput after running the whole extension will be something like this (below)
+```
+┌──(my-py-venv)─(kali㉿kali)-[snipe/backend]
+└─$ cd /backend
+find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+source .venv/bin/activate
+uvicorn server:app --reload --port 8765
+INFO:     Will watch for changes in these directories: ['snipe/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+INFO:     Started reloader process [28311] using WatchFiles
+INFO:     Started server process [28314]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:parser.repo_parser:Scanned 4 supported files, got 14 symbols
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:57936 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:57936 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:42362 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 2 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/core.c: 3 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:58628 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 2 diagnostics
+INFO:     127.0.0.1:37754 - "POST /analyze HTTP/1.1" 200 OK
+INFO:parser.symbol_extractor:C regex fallback added 3 array_access ref(s)
+INFO:server:Analyze /media/sf_ai-code-scanner/demo_repo/main.c: 7 buffer_refs, 4 diagnostics
+```
+
 ## Directory layout
 
 ```
@@ -156,6 +205,8 @@ Snipe/
 │   └── data/repo_symbols.json
 ├── demo_repo/
 ├── tests/unit_tests.py
+├── CONTRIBUTING.md
+├── License
 └── README.md
 ```
 
@@ -183,6 +234,15 @@ From project root:
 python tests/unit_tests.py
 ```
 
-## License
+## Notes
+The default branch has been renamed!
+`master` is now named `main`
 
-MIT.
+If you have a local clone already where branch name is still `master`, you can update it by running the following commands.
+
+```
+git branch -m master main
+git fetch origin
+git branch -u origin/main main
+git remote set-head origin -a
+```

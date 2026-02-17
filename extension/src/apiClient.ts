@@ -5,11 +5,17 @@
 const DEFAULT_PORT = 8765;
 const DEFAULT_HOST = "127.0.0.1";
 
+export interface OpenBuffer {
+  content: string;
+  file_path: string;
+}
+
 export interface AnalyzeRequest {
   content: string;
   file_path: string;
   repo_path: string;
   language?: string;
+  open_buffers?: OpenBuffer[];
 }
 
 export interface DiagnosticItem {

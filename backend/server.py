@@ -53,23 +53,54 @@ def favicon():
     return Response(status_code=204)
 
 
+class OpenBuffer(BaseModel):
+    content: str
+    file_path: str
+
+
 class AnalyzeRequest(BaseModel):
     content: str
     file_path: str
     repo_path: str
     language: Optional[str] = None
+    open_buffers: Optional[list[OpenBuffer]] = None
 
 
 class RefreshRequest(BaseModel):
     repo_path: str
 
 
-def _ensure_repo_symbols(repo_path: str) -> list[dict]:
-    global _repo_symbols, _repo_path
-    if _repo_path != repo_path or not _repo_symbols:
+_repo_mtime: float = 0.0  # max mtime of supported files at last index
+
+
+def _max_repo_mtime(repo_path: str) -> float:
+    """Return the max modification time of supported files in the repo."""
+    import os
+    max_mt = 0.0
+    for root, dirs, files in os.walk(repo_path):
+        # Skip ignored dirs in-place
+        dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in (".c", ".h", ".py"):
+                try:
+                    mt = os.path.getmtime(os.path.join(root, f))
+                    if mt > max_mt:
+                        max_mt = mt
+                except OSError:
+                    pass
+    return max_mt
+
+
+def _ensure_repo_symbols(repo_path: str, force: bool = False) -> list[dict]:
+    global _repo_symbols, _repo_path, _repo_mtime
+    current_mtime = _max_repo_mtime(repo_path)
+    needs_rebuild = force or _repo_path != repo_path or not _repo_symbols or current_mtime > _repo_mtime
+    if needs_rebuild:
         _repo_path = repo_path
         _symbols_path.parent.mkdir(parents=True, exist_ok=True)
         _repo_symbols = build_repo_symbol_table(repo_path, output_json_path=_symbols_path)
+        _repo_mtime = current_mtime
     return _repo_symbols
 
 
@@ -96,9 +127,41 @@ def analyze(request: AnalyzeRequest) -> dict:
     current_file = request.file_path
     diagnostics: list[Diagnostic] = []
     repo_dicts = [s if isinstance(s, dict) else s.to_dict() for s in repo_symbols]
+
+    # Overlay unsaved open buffers: re-extract symbols from other editors' content
+    # so cross-file checks use live (unsaved) types, not stale on-disk versions.
+    if request.open_buffers:
+        from parser.symbol_extractor import extract_symbols_from_source
+        # Collect file paths that have live buffers (normalize to relative)
+        overlay_files: set[str] = set()
+        overlay_symbols: list[dict] = []
+        for ob in request.open_buffers:
+            rel = ob.file_path
+            try:
+                rel = str(Path(ob.file_path).relative_to(Path(repo_path)))
+            except (ValueError, TypeError):
+                pass
+            rel = rel.replace("\\", "/")
+            overlay_files.add(rel)
+            syms = extract_symbols_from_source(ob.content.encode("utf-8"), rel)
+            for s in syms:
+                s.file_path = rel
+                overlay_symbols.append(s.to_dict())
+        # Remove repo symbols from overlay files and replace with live ones
+        repo_dicts = [s for s in repo_dicts if s.get("file_path", "").replace("\\", "/") not in overlay_files]
+        repo_dicts.extend(overlay_symbols)
     diagnostics.extend(check_type_mismatch(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_array_bounds(buffer_refs, buffer_symbols, repo_dicts, current_file))
     diagnostics.extend(check_function_signatures(buffer_refs, repo_dicts, current_file))
+    # Deduplicate diagnostics (same file, line, code, message)
+    seen: set[tuple] = set()
+    unique_diagnostics: list[Diagnostic] = []
+    for d in diagnostics:
+        key = (d.file, d.line, d.code, d.message)
+        if key not in seen:
+            seen.add(key)
+            unique_diagnostics.append(d)
+    diagnostics = unique_diagnostics
     log.info("Analyze %s: %d buffer_refs, %d diagnostics", current_file, len(buffer_refs), len(diagnostics))
     return {
         "diagnostics": [_diagnostic_to_dict(d) for d in diagnostics],

@@ -4,7 +4,7 @@
  */
 
 import * as vscode from "vscode";
-import { analyzeBuffer, getGraph, refreshRepo, healthCheck } from "./apiClient";
+import { analyzeBuffer, getGraph, refreshRepo, healthCheck, OpenBuffer } from "./apiClient";
 import { setDiagnostics, clearDiagnostics } from "./diagnostics";
 import { openGraphPanel, refreshGraph } from "./webview";
 
@@ -23,11 +23,22 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!isSupported(doc)) return;
     const repoPath = getRepoPath();
     if (!repoPath) return;
+    // Collect unsaved content from other open supported files so the server
+    // can use live (not stale on-disk) symbols for cross-file checks.
+    const openBuffers: OpenBuffer[] = [];
+    for (const otherDoc of vscode.workspace.textDocuments) {
+      if (otherDoc.uri.toString() === doc.uri.toString()) continue;
+      if (!isSupported(otherDoc)) continue;
+      if (otherDoc.isClosed) continue;
+      openBuffers.push({ content: otherDoc.getText(), file_path: otherDoc.uri.fsPath });
+    }
+
     clearDiagnostics(doc.uri, diagnosticCollection);
     analyzeBuffer({
       content: doc.getText(),
       file_path: doc.uri.fsPath,
       repo_path: repoPath,
+      open_buffers: openBuffers.length > 0 ? openBuffers : undefined,
     })
       .then((res) => {
         setDiagnostics(doc.uri, res.diagnostics, diagnosticCollection);
@@ -93,17 +104,22 @@ export function activate(context: vscode.ExtensionContext): void {
         const res = await refreshRepo(repoPath, DEFAULT_PORT);
         vscode.window.showInformationMessage(`Snipe: Refreshed ${res.symbol_count} symbols.`);
         refreshGraph(() => getGraph(repoPath, DEFAULT_PORT));
-        const doc = vscode.window.activeTextEditor?.document;
-        if (doc && isSupported(doc)) runAnalysis(doc);
+        // Analyze all open supported docs so cross-file diagnostics (e.g. main.c vs core.c) show
+        for (const doc of vscode.workspace.textDocuments) {
+          if (isSupported(doc)) runAnalysis(doc);
+        }
       } catch (e) {
         vscode.window.showErrorMessage("Snipe: Refresh failed. " + (e instanceof Error ? e.message : String(e)));
       }
     })
   );
 
-  const activeDoc = vscode.window.activeTextEditor?.document;
-  if (activeDoc && isSupported(activeDoc)) {
-    debouncedAnalysis(activeDoc);
+  // Analyze all open supported docs on startup so cross-file diagnostics show
+  const repoPath = getRepoPath();
+  if (repoPath) {
+    for (const doc of vscode.workspace.textDocuments) {
+      if (isSupported(doc)) runAnalysis(doc);
+    }
   }
 }
 

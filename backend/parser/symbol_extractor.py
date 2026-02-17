@@ -1,3 +1,4 @@
+
 """
 AST symbol extraction using Tree-sitter.
 Extracts variables, functions, arrays, types with metadata (name, type, file, line, scope).
@@ -29,6 +30,9 @@ class Symbol:
     array_size: Optional[int] = None
     params: list[dict[str, Any]] = field(default_factory=list)
     references: list[dict[str, Any]] = field(default_factory=list)
+    return_type: Optional[str] = None
+    is_variadic: bool = False
+    is_extern: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -41,17 +45,21 @@ class Symbol:
             "array_size": self.array_size,
             "params": self.params,
             "references": self.references,
+            "return_type": self.return_type,
+            "is_variadic": self.is_variadic,
+            "is_extern": self.is_extern,
         }
 
 
 @dataclass
 class Reference:
     name: str
-    kind: str  # call, read, array_access
+    kind: str  # call, read, array_access, array_write
     inferred_type: Optional[str] = None
     line: int = 0
     index_value: Optional[int] = None  # for array[index]
     arg_count: Optional[int] = None  # for function calls
+    rhs_name: Optional[str] = None  # for array_write: RHS identifier when inferred_type is None
 
 
 def _get_language(lang_name: str):
@@ -107,6 +115,61 @@ def _line_of(node: Node, source: bytes) -> int:
     return source[:node.start_byte].count(b"\n") + 1
 
 
+def _infer_c_expr_type(node: Node, source: bytes) -> Optional[str]:
+    """Infer C expression type for array write RHS: number_literal -> int, etc."""
+    if not node:
+        return None
+    if node.type == "number_literal":
+        txt = _source_at(node, source)
+        if "." in txt or "e" in txt.lower() or "f" in txt.lower():
+            return "float"
+        return "int"
+    if node.type in ("char_literal", "string_literal"):
+        return "char"
+    if node.type == "identifier":
+        return None  # caller looks up from symbols
+    # binary_expression, conditional_expression, unary_expression, etc. – recurse
+    for c in node.children:
+        t = _infer_c_expr_type(c, source)
+        if t:
+            return t
+    return "int"
+
+
+def _get_python_type_annotation(node: Node, source: bytes) -> Optional[str]:
+    """Extract type string from a tree-sitter annotation node."""
+    if node is None:
+        return None
+    text = _source_at(node, source).strip()
+    # Strip leading ': ' or '-> ' that tree-sitter may include
+    if text.startswith("->"):
+        text = text[2:].strip()
+    if text.startswith(":"):
+        text = text[1:].strip()
+    return text if text else None
+
+
+def _infer_type_from_rhs(node: Node) -> Optional[str]:
+    """Infer Python type from a right-hand-side literal node type."""
+    _TYPE_MAP = {
+        "list": "list",
+        "tuple": "tuple",
+        "integer": "int",
+        "float": "float",
+        "string": "str",
+        "true": "bool",
+        "false": "bool",
+        "dictionary": "dict",
+    }
+    return _TYPE_MAP.get(node.type)
+
+
+def _count_elements(node: Node) -> int:
+    """Count element children of a list/tuple node (skip brackets and commas)."""
+    skip = {"(", ")", "[", "]", ","}
+    return sum(1 for c in node.children if c.type not in skip)
+
+
 def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
     symbols: list[Symbol] = []
     parser = _get_parser("python")
@@ -123,19 +186,61 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                 name = _source_at(name_node, source).strip()
                 params_node = node.child_by_field_name("parameters")
                 params = []
+                is_variadic = False
                 if params_node:
                     for c in params_node.children:
-                        if c.type == "identifier" and _source_at(c, source) != "self":
-                            params.append({"name": _source_at(c, source), "type": None})
+                        pname = _source_at(c, source).strip()
+                        if c.type == "identifier":
+                            if pname in ("self", "cls"):
+                                continue
+                            params.append({"name": pname, "type": None, "has_default": False})
+                        elif c.type == "typed_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            ptype_node = c.child_by_field_name("type")
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            ptype = _get_python_type_annotation(ptype_node, source) if ptype_node else None
+                            params.append({"name": id_name, "type": ptype, "has_default": False})
+                        elif c.type == "default_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            params.append({"name": id_name, "type": None, "has_default": True})
+                        elif c.type == "typed_default_parameter":
+                            id_node = c.child_by_field_name("name") or next((sc for sc in c.children if sc.type == "identifier"), None)
+                            ptype_node = c.child_by_field_name("type")
+                            id_name = _source_at(id_node, source).strip() if id_node else pname
+                            if id_name in ("self", "cls"):
+                                continue
+                            ptype = _get_python_type_annotation(ptype_node, source) if ptype_node else None
+                            params.append({"name": id_name, "type": ptype, "has_default": True})
+                        elif c.type == "list_splat_pattern":
+                            is_variadic = True
+                            id_node = next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else "args"
+                            params.append({"name": f"*{id_name}", "type": None, "has_default": False})
+                        elif c.type == "dictionary_splat_pattern":
+                            is_variadic = True
+                            id_node = next((sc for sc in c.children if sc.type == "identifier"), None)
+                            id_name = _source_at(id_node, source).strip() if id_node else "kwargs"
+                            params.append({"name": f"**{id_name}", "type": None, "has_default": False})
+
+                # Extract return type annotation
+                ret_type_node = node.child_by_field_name("return_type")
+                ret_type = _get_python_type_annotation(ret_type_node, source) if ret_type_node else None
+
                 symbols.append(Symbol(
-                    name=name, kind="function", type=None,
+                    name=name, kind="function", type=ret_type,
                     file_path=file_path, line=_line_of(node, source), scope=scope,
-                    params=params
+                    params=params, return_type=ret_type, is_variadic=is_variadic,
                 ))
                 inner_scope = f"{scope}.{name}" if scope else name
                 for c in node.children:
                     walk(c, inner_scope)
             return
+
         if node.type == "class_definition":
             name_node = node.child_by_field_name("name")
             if name_node:
@@ -145,17 +250,35 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                     file_path=file_path, line=_line_of(node, source), scope=scope
                 ))
                 inner_scope = f"{scope}.{name}" if scope else name
+                # Walk children — assignments (including annotated ones like
+                # dataclass fields) are handled by the assignment branch below.
                 for c in node.children:
                     walk(c, inner_scope)
             return
+
         if node.type == "assignment":
+            # Get the RHS value node
+            rhs_node = node.child_by_field_name("right") or (node.children[-1] if len(node.children) >= 3 else None)
+            # Get the type annotation node (for annotated assignments like `x: int = 5`)
+            type_node = node.child_by_field_name("type")
+            explicit_type = _get_python_type_annotation(type_node, source) if type_node else None
+
             for c in node.children:
                 if c.type == "identifier":
                     name = _source_at(c, source).strip()
                     if name and not name.startswith("_"):
+                        inferred_type = explicit_type
+                        array_size = None
+                        kind = "variable"
+                        if rhs_node and inferred_type is None:
+                            inferred_type = _infer_type_from_rhs(rhs_node)
+                        if rhs_node and rhs_node.type in ("list", "tuple"):
+                            array_size = _count_elements(rhs_node)
+                            kind = "array"
                         symbols.append(Symbol(
-                            name=name, kind="variable", type=None,
-                            file_path=file_path, line=_line_of(node, source), scope=scope
+                            name=name, kind=kind, type=inferred_type,
+                            file_path=file_path, line=_line_of(node, source), scope=scope,
+                            array_size=array_size,
                         ))
                     break
                 if c.type in ("tuple_pattern", "list_pattern"):
@@ -167,6 +290,7 @@ def _extract_python_symbols(source: bytes, file_path: str) -> list[Symbol]:
                                     name=name, kind="variable", type=None,
                                     file_path=file_path, line=_line_of(node, source), scope=scope
                                 ))
+
         for c in node.children:
             walk(c, scope)
 
@@ -250,6 +374,10 @@ def _extract_c_symbols(source: bytes, file_path: str) -> list[Symbol]:
                     ))
         if node.type == "declaration":
             type_str = get_type_str(node)
+            is_extern = any(
+                c.type == "storage_class_specifier" and _source_at(c, source).strip() == "extern"
+                for c in node.children
+            )
             decl_list = node.child_by_field_name("declarator") or node.child_by_field_name("init_declarator_list")
             if decl_list:
                 for c in decl_list.children:
@@ -261,14 +389,14 @@ def _extract_c_symbols(source: bytes, file_path: str) -> list[Symbol]:
                             symbols.append(Symbol(
                                 name=name, kind="array" if size is not None else "variable",
                                 type=type_str, file_path=file_path, line=_line_of(node, source),
-                                scope="", array_size=size
+                                scope="", array_size=size, is_extern=is_extern,
                             ))
                     elif c.type == "identifier":
                         name = _source_at(c, source).strip()
                         symbols.append(Symbol(
                             name=name, kind="variable",
                             type=type_str, file_path=file_path, line=_line_of(node, source),
-                            scope="", array_size=None
+                            scope="", array_size=None, is_extern=is_extern,
                         ))
         if node.type == "struct_specifier":
             name_node = node.child_by_field_name("name")
@@ -302,6 +430,67 @@ def _extract_c_symbols(source: bytes, file_path: str) -> list[Symbol]:
                 except ValueError:
                     pass
     return symbols
+
+
+def _get_comment_and_string_ranges_c(source: bytes) -> list[tuple[int, int]]:
+    """Return (start_byte, end_byte) ranges for C comments and string literals.
+    Used to skip regex matches that fall inside comments or strings."""
+    ranges: list[tuple[int, int]] = []
+    i = 0
+    n = len(source)
+    while i < n:
+        if i < n - 1 and source[i : i + 2] == b"//":
+            start = i
+            i += 2
+            while i < n and source[i : i + 1] != b"\n":
+                i += 1
+            ranges.append((start, i))
+            continue
+        if i < n - 1 and source[i : i + 2] == b"/*":
+            start = i
+            i += 2
+            while i < n - 1 and source[i : i + 2] != b"*/":
+                i += 1
+            i = min(i + 2, n)
+            ranges.append((start, i))
+            continue
+        if source[i : i + 1] in (b'"', b"'"):
+            quote = source[i : i + 1]
+            start = i
+            i += 1
+            while i < n:
+                if source[i : i + 1] == b"\\":
+                    i += 2
+                    continue
+                if source[i : i + 1] == quote:
+                    i += 1
+                    break
+                i += 1
+            ranges.append((start, i))
+            continue
+        i += 1
+    return ranges
+
+
+def _position_in_ranges(pos: int, ranges: list[tuple[int, int]]) -> bool:
+    """Return True if pos (byte offset) falls inside any range."""
+    for start, end in ranges:
+        if start <= pos < end:
+            return True
+    return False
+
+
+def _is_array_declarator_context_c(source: bytes, match_end: int) -> bool:
+    """Return True if identifier[number] at match_end is in declaration context
+    (array size in declarator), not an array access. E.g. 'extern int arr[10];'
+    has [10] as size, not access."""
+    n = len(source)
+    i = match_end
+    while i < n and source[i : i + 1] in b" \t\n\r":
+        i += 1
+    if i < n and source[i : i + 1] == b";":
+        return True
+    return False
 
 
 def extract_symbols_from_source(source: bytes, file_path: str, language: Optional[str] = None) -> list[Symbol]:
@@ -339,23 +528,23 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
         return refs
 
     def walk(node: Node):
-        if node.type == "call_expression" and language == "python":
+        if node.type in ("call_expression", "call") and language == "python":
             fn = node.child_by_field_name("function")
             if fn:
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type != "(" and c.type != ")" and c.type != ","]) if args else 0
+                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
                 refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
-        if node.type == "call_expression" and language == "c":
+        if node.type in ("call_expression", "call") and language == "c":
             fn = node.child_by_field_name("function")
             if fn and fn.type == "identifier":
                 name = _source_at(fn, source).strip()
                 args = node.child_by_field_name("arguments")
-                nargs = len([c for c in args.children if c.type != "(" and c.type != ")" and c.type != ","]) if args else 0
+                nargs = len([c for c in args.children if c.type not in ("(", ")", ",")]) if args else 0
                 refs.append(Reference(name=name, kind="call", line=_line_of(node, source), arg_count=nargs))
-        if node.type == "subscript_expression" and language == "python":
+        if node.type in ("subscript_expression", "subscript") and language == "python":
             obj = node.child_by_field_name("value")
-            idx = node.child_by_field_name("index")
+            idx = node.child_by_field_name("subscript") or node.child_by_field_name("index")
             if obj and idx:
                 name = _source_at(obj, source).strip()
                 idx_str = _source_at(idx, source).strip()
@@ -364,8 +553,8 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
                 except ValueError:
                     index_val = None
                 refs.append(Reference(name=name, kind="array_access", line=_line_of(node, source), index_value=index_val))
-        if node.type == "array_declarator" or (node.type == "subscript_expression" and language == "c"):
-            if language == "c" and node.type == "subscript_expression":
+        if node.type == "array_declarator" or (node.type in ("subscript_expression", "subscript") and language == "c"):
+            if language == "c" and node.type in ("subscript_expression", "subscript"):
                 arr = node.child_by_field_name("argument")
                 idx = node.child_by_field_name("index")
                 # Some tree-sitter-c versions use different fields; try positional fallback (array, '[', index, ']').
@@ -382,26 +571,60 @@ def extract_references_from_source(source: bytes, file_path: str, language: Opti
                     refs.append(Reference(name=name, kind="array_access", line=_line_of(node, source), index_value=index_val))
         if node.type == "identifier" and language == "python":
             parent = node.parent
-            if parent and parent.type not in ("call_expression", "function_definition", "parameters", "attribute"):
+            if parent and parent.type not in ("call_expression", "call", "function_definition", "parameters", "attribute"):
                 name = _source_at(node, source).strip()
                 if name and not name.startswith("_"):
                     refs.append(Reference(name=name, kind="read", line=_line_of(node, source)))
+        # C: arr[i] = expr – detect array write for type mismatch (e.g. assigning int to char[])
+        if node.type == "assignment_expression" and language == "c":
+            left = node.child_by_field_name("left")
+            right = node.child_by_field_name("right")
+            if left and left.type in ("subscript_expression", "subscript") and right:
+                arr_node = left.child_by_field_name("argument")
+                idx_node = left.child_by_field_name("index")
+                if (not arr_node or not idx_node) and len(left.children) >= 4:
+                    arr_node = left.children[0]
+                    idx_node = left.children[2]
+                if arr_node and idx_node:
+                    name = _source_at(arr_node, source).strip()
+                    idx_str = _source_at(idx_node, source).strip()
+                    try:
+                        index_val = int(idx_str, 0)
+                    except ValueError:
+                        index_val = None
+                    rhs_type = _infer_c_expr_type(right, source)
+                    rhs_name = _source_at(right, source).strip() if right.type == "identifier" else None
+                    refs.append(Reference(
+                        name=name, kind="array_write", line=_line_of(node, source),
+                        index_value=index_val, inferred_type=rhs_type, rhs_name=rhs_name,
+                    ))
         for c in node.children:
             walk(c)
 
     walk(tree.root_node)
 
-    # Fallback for C: always scan with regex for identifier[number] (tree-sitter often misses subscript in C)
+    # Fallback for C: scan with regex for identifier[number] (tree-sitter often misses subscript in C)
+    # Skip matches inside comments/strings, skip declaration context (array size), dedup with tree-sitter refs
     if language == "c":
         import logging
+        skip_ranges = _get_comment_and_string_ranges_c(source)
+        # Build set of existing (name, line, index) to avoid duplicates
+        existing_refs = {(r.name, r.line, r.index_value) for r in refs if r.kind == "array_access"}
         n_before = len(refs)
         for m in re.finditer(rb"([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*(\d+)\s*\]", source):
+            if _position_in_ranges(m.start(), skip_ranges):
+                continue
+            if _is_array_declarator_context_c(source, m.end()):
+                continue
             name = m.group(1).decode("utf-8", errors="replace")
             try:
                 index_val = int(m.group(2), 10)
             except ValueError:
                 index_val = None
             line = source[: m.start()].count(b"\n") + 1
+            if (name, line, index_val) in existing_refs:
+                continue
+            existing_refs.add((name, line, index_val))
             refs.append(Reference(name=name, kind="array_access", line=line, index_value=index_val))
         if len(refs) > n_before:
             logging.getLogger(__name__).info("C regex fallback added %d array_access ref(s)", len(refs) - n_before)

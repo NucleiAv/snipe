@@ -13,7 +13,7 @@ extern void process(int count);
 
 int main(void) {
     process(5);
-    int x = arr[144];   /* BUG: out of bounds – arr has size 10 */
+    int x = arr[1];
     printf("%d\n", x);
     return add(1, 2);
 }
