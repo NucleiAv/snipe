@@ -12,6 +12,8 @@ Contributors must read - [snipe contributions doc](https://github.com/NucleiAv/s
 
 Comparison of snipe with other exisitng tools - [snipe vs others](https://github.com/NucleiAv/snipe/blob/main/snipe_VS_other.md)
 
+Supported handled error - [supported error handling](https://github.com/NucleiAv/snipe/blob/extend-error-handling/supported_error_handling.md)
+
 ---
 
 ## Features
