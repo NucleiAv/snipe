@@ -11,7 +11,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "val",
@@ -25,7 +26,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "arr",
@@ -39,7 +41,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "balance",
@@ -53,7 +56,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "add",
@@ -76,7 +80,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "process",
@@ -95,7 +100,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "i",
@@ -109,7 +115,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "arr",
@@ -123,7 +130,23 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": true
+    "is_extern": true,
+    "members": []
+  },
+  {
+    "name": "balance",
+    "kind": "variable",
+    "type": "float",
+    "file_path": "main.c",
+    "line": 10,
+    "scope": "",
+    "array_size": null,
+    "params": [],
+    "references": [],
+    "return_type": null,
+    "is_variadic": false,
+    "is_extern": true,
+    "members": []
   },
   {
     "name": "add",
@@ -137,7 +160,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": true
+    "is_extern": true,
+    "members": []
   },
   {
     "name": "process",
@@ -151,7 +175,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": true
+    "is_extern": true,
+    "members": []
   },
   {
     "name": "main",
@@ -165,7 +190,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "x",
@@ -179,7 +205,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -193,7 +220,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -207,7 +235,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -221,7 +250,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -235,7 +265,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -249,7 +280,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "result",
@@ -263,7 +295,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "first",
@@ -277,7 +310,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "last",
@@ -291,7 +325,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "oob",
@@ -305,7 +340,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "balance",
@@ -319,7 +355,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "cfg",
@@ -333,7 +370,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "balance",
@@ -347,7 +385,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "scores",
@@ -361,7 +400,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "greet",
@@ -386,7 +426,8 @@
     "references": [],
     "return_type": "str",
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "compute",
@@ -416,7 +457,8 @@
     "references": [],
     "return_type": "int",
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "flexible",
@@ -441,7 +483,8 @@
     "references": [],
     "return_type": "None",
     "is_variadic": true,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "Config",
@@ -455,7 +498,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "host",
@@ -469,7 +513,8 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   },
   {
     "name": "port",
@@ -483,6 +528,7 @@
     "references": [],
     "return_type": null,
     "is_variadic": false,
-    "is_extern": false
+    "is_extern": false,
+    "members": []
   }
 ]

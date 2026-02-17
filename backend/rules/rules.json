@@ -22,13 +22,49 @@
       "id": "SNIPE_UNDEFINED_SYMBOL",
       "name": "Undefined symbol",
       "severity": "WARNING",
-      "description": "Reference to symbol not defined in repository."
+      "description": "Reference to symbol not defined in repository or standard library."
     },
     {
       "id": "SNIPE_SHADOWED_SYMBOL",
       "name": "Shadowed symbol",
-      "severity": "INFO",
+      "severity": "WARNING",
       "description": "Variable may be shadowing a symbol from outer scope."
+    },
+    {
+      "id": "SNIPE_FORMAT_STRING",
+      "name": "Format string argument mismatch",
+      "severity": "ERROR",
+      "description": "Printf-family format string has wrong number of specifiers vs arguments."
+    },
+    {
+      "id": "SNIPE_UNUSED_EXTERN",
+      "name": "Unused extern declaration",
+      "severity": "WARNING",
+      "description": "Extern declaration is never referenced in the file."
+    },
+    {
+      "id": "SNIPE_DEAD_IMPORT",
+      "name": "Dead import",
+      "severity": "WARNING",
+      "description": "Imported name is never used in the file."
+    },
+    {
+      "id": "SNIPE_UNSAFE_FUNCTION",
+      "name": "Unsafe function usage",
+      "severity": "WARNING",
+      "description": "Use of a C function known to cause buffer overflows."
+    },
+    {
+      "id": "SNIPE_ARG_TYPE_MISMATCH",
+      "name": "Argument type mismatch",
+      "severity": "ERROR",
+      "description": "Function argument type does not match parameter annotation."
+    },
+    {
+      "id": "SNIPE_STRUCT_ACCESS",
+      "name": "Invalid struct member access",
+      "severity": "ERROR",
+      "description": "Accessing a member that does not exist on the struct type."
     }
   ]
 }
