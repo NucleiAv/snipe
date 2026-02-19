@@ -21,6 +21,18 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+from parser.symbol_extractor import extract_includes, extract_imports, extract_function_calls
+
+
+def get_language(file_path: str) -> str:
+    """Return a language tag for a file path based on its extension."""
+    ext = file_path.split('.')[-1].lower() if '.' in file_path else ''
+    if ext in ('c', 'h'):
+        return 'c'
+    elif ext == 'py':
+        return 'python'
+    return 'unknown'
+
 try:
     import networkx as nx
     HAS_NX = True
@@ -29,7 +41,7 @@ except ImportError:
     nx = None
 
 
-def build_repo_graph(symbols: list[dict[str, Any]], diagnostics: list[dict] = None) -> dict[str, Any]:
+def build_repo_graph(symbols: list[dict[str, Any]], diagnostics: list[dict] = None, repo_path: str = None) -> dict[str, Any]:
     """
     Build the D3.js-compatible graph from a flat symbol list.
 
@@ -161,7 +173,146 @@ def build_repo_graph(symbols: list[dict[str, Any]], diagnostics: list[dict] = No
                         "type": "REFERENCES"
                     })
 
-    return {"nodes": nodes, "edges": edges}
+    # ------------------------------------------------------------------
+    # Pass 4 — INCLUDES edges (C/H files) and IMPORTS edges (Python files).
+    # Read each source file to detect #include / import statements and emit
+    # new special nodes + edges so the viewer can see file-level deps.
+    # ------------------------------------------------------------------
+    existing_node_ids: set[str] = {n['id'] for n in nodes}
+
+    for node in list(nodes):  # snapshot — we append inside the loop
+        if node['kind'] != 'file':
+            continue
+
+        fp = node['file_path']
+        # Resolve to an absolute path when repo_path is supplied.
+        abs_fp = fp
+        if repo_path and not os.path.isabs(fp):
+            abs_fp = os.path.join(repo_path, fp)
+
+        try:
+            code = Path(abs_fp).read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+
+        if fp.endswith(('.c', '.h')):
+            for inc in extract_includes(code, fp):
+                inc_name = inc['file']
+                inc_id = f'include:{inc_name}'
+                if inc_id not in existing_node_ids:
+                    nodes.append({
+                        'id': inc_id,
+                        'label': inc_name,
+                        'kind': 'included_file',
+                        'type': 'included_file',
+                        'file_path': '',
+                        'line': 0,
+                        'hasErrors': False,
+                        'symbolCount': 0,
+                    })
+                    existing_node_ids.add(inc_id)
+                edges.append({
+                    'source': node['id'],
+                    'target': inc_id,
+                    'type': 'INCLUDES',
+                })
+
+        elif fp.endswith('.py'):
+            for imp in extract_imports(code, fp):
+                mod_name = imp['module']
+                mod_id = f'import:{mod_name}'
+                if mod_id not in existing_node_ids:
+                    nodes.append({
+                        'id': mod_id,
+                        'label': mod_name,
+                        'kind': 'imported_module',
+                        'type': 'imported_module',
+                        'file_path': '',
+                        'line': 0,
+                        'hasErrors': False,
+                        'symbolCount': 0,
+                    })
+                    existing_node_ids.add(mod_id)
+                edges.append({
+                    'source': node['id'],
+                    'target': mod_id,
+                    'type': 'IMPORTS',
+                })
+
+    # ------------------------------------------------------------------
+    # Pass 5 — CALLS edges between function symbols in the same file.
+    # For each file we collect its function symbols, then scan the source
+    # for calls and create edges between caller and callee nodes.
+    # ------------------------------------------------------------------
+    # Build a map: file_path -> list of function symbol nodes
+    file_func_nodes: dict[str, list[dict]] = {}
+    for node in nodes:
+        if node['kind'] == 'function':
+            fp = node.get('file_path', '')
+            file_func_nodes.setdefault(fp, []).append(node)
+
+    for fp, func_nodes in file_func_nodes.items():
+        abs_fp = fp
+        if repo_path and not os.path.isabs(fp):
+            abs_fp = os.path.join(repo_path, fp)
+        try:
+            code = Path(abs_fp).read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+
+        # Build symbol dicts for extract_function_calls
+        sym_dicts = [{'name': n['label'], 'kind': 'function'} for n in func_nodes]
+        # Build lookup: function name -> node
+        func_by_name: dict[str, list[dict]] = {}
+        for fn in func_nodes:
+            func_by_name.setdefault(fn['label'], []).append(fn)
+
+        calls = extract_function_calls(code, sym_dicts)
+        for call in calls:
+            callee_name = call['function']
+            call_line = call['line']
+            callee_nodes = func_by_name.get(callee_name, [])
+            # Determine the caller: function whose body contains call_line.
+            # Use the function defined before call_line with the closest line number.
+            caller_node = None
+            best_dist = float('inf')
+            for fn in func_nodes:
+                if fn['label'] == callee_name:
+                    continue  # skip self-references
+                if fn['line'] <= call_line:
+                    dist = call_line - fn['line']
+                    if dist < best_dist:
+                        best_dist = dist
+                        caller_node = fn
+            if caller_node is None:
+                continue
+            for callee_node in callee_nodes:
+                if callee_node['id'] == caller_node['id']:
+                    continue
+                edges.append({
+                    'source': caller_node['id'],
+                    'target': callee_node['id'],
+                    'type': 'CALLS',
+                })
+
+    # ------------------------------------------------------------------
+    # Filter out cross-language REFERENCES edges (e.g. C symbol matching
+    # a Python symbol by name — these are coincidental, not real deps).
+    # ------------------------------------------------------------------
+    node_index = {n['id']: n for n in nodes}
+    filtered_edges = []
+    for edge in edges:
+        if edge['type'] == 'REFERENCES':
+            source_node = node_index.get(edge['source'])
+            target_node = node_index.get(edge['target'])
+            if source_node and target_node:
+                source_lang = get_language(source_node.get('file_path', ''))
+                target_lang = get_language(target_node.get('file_path', ''))
+                if source_lang != target_lang:
+                    continue
+        filtered_edges.append(edge)
+
+    return {"nodes": nodes, "edges": filtered_edges}
 
 
 def build_graph_networkx(symbols: list[dict[str, Any]], diagnostics: list[dict] = None) -> "Optional[Any]":
