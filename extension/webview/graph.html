@@ -119,12 +119,22 @@
     }
 
     .link-CALLS {
-      stroke: #f39c12;
+      stroke: #FF8C00;
       stroke-width: 2px;
     }
 
     .link-REFERENCES {
-      stroke: #3498db;
+      stroke: #61AFEF;
+      stroke-width: 1.5px;
+    }
+
+    .link-INCLUDES {
+      stroke: #20B2AA;
+      stroke-width: 1.5px;
+    }
+
+    .link-IMPORTS {
+      stroke: #32CD32;
       stroke-width: 1.5px;
     }
 
@@ -348,10 +358,12 @@
         <span class="panel-arrow" id="filters-arrow">▼</span>
       </div>
       <div id="filters-body" class="panel-body">
-        <label><input type="checkbox" id="filterErrors"> Show only errors</label>
+        <label><input type="checkbox" id="filterErrors"> Error files only</label>
         <label><input type="checkbox" id="filterCurrentFile"> Current file only</label>
         <label><input type="checkbox" id="hideVariables"> Hide variables</label>
         <label><input type="checkbox" id="filterFunctions"> Functions only</label>
+        <label><input type="checkbox" id="filterHeaders"> Header files</label>
+        <label><input type="checkbox" id="filterPyImports"> Py imports</label>
         <input type="text" id="searchBox" placeholder="Search nodes...">
       </div>
     </div>
@@ -393,18 +405,34 @@
           <div class="legend-shape" style="background:#E5C07B;transform:rotate(45deg);width:9px;height:9px;margin-right:9px;flex-shrink:0;"></div>
           <span>Array</span>
         </div>
+        <div class="legend-item">
+          <div class="legend-shape" style="background:#20B2AA;border-radius:2px;"></div>
+          <span>C Header</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-shape" style="background:#32CD32;border-radius:2px;"></div>
+          <span>Py Module</span>
+        </div>
         <div class="legend-section-title">Edges</div>
         <div class="legend-item">
           <div class="legend-line" style="background:#C678DD;"></div>
           <span>BELONGS_TO</span>
         </div>
         <div class="legend-item">
-          <div class="legend-line" style="background:#f39c12;"></div>
+          <div class="legend-line" style="background:#FF8C00;"></div>
           <span>CALLS</span>
         </div>
         <div class="legend-item">
-          <div class="legend-line" style="background:#3498db;"></div>
+          <div class="legend-line" style="background:#61AFEF;"></div>
           <span>REFERENCES</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background:#20B2AA;"></div>
+          <span>INCLUDES</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background:#32CD32;"></div>
+          <span>IMPORTS</span>
         </div>
       </div>
     </div>
@@ -425,11 +453,25 @@
       }
     }
 
+    // ── Edge color by relationship ─────────────────────────────────────────
+    function getEdgeColor(edge) {
+      switch (edge.relationship || edge.type) {
+        case 'BELONGS_TO': return '#C678DD';  // Purple
+        case 'CALLS':      return '#FF8C00';  // Orange (both C and Python)
+        case 'REFERENCES': return '#61AFEF';  // Sky Blue
+        case 'INCLUDES':   return '#20B2AA';  // Teal (C)
+        case 'IMPORTS':    return '#32CD32';  // Lime Green (Python)
+        default: return '#888';
+      }
+    }
+
     // ── Symbol node colors ─────────────────────────────────────────────────
     function getNodeColor(node) {
       if (node.hasErrors) return '#ff0000';
       const nodeType = node.kind || node.type || 'default';
       if (nodeType === 'file') return getFileColor(node);
+      if (nodeType === 'included_file') return '#20B2AA';   // Teal (C Header)
+      if (nodeType === 'imported_module') return '#32CD32'; // Lime Green (Py Module)
       const colorMap = {
         'function': '#61AFEF',
         'variable': '#98C379',
@@ -522,6 +564,8 @@
       filterCurrentFile:  false,
       hideVariables:      false,
       filterFunctions:    false,
+      filterHeaders:      false,
+      filterPyImports:    false,
       searchText:         ''
     };
 
@@ -544,7 +588,7 @@
 
     // ── Wire up controls (Part 2 + Part 4) ────────────────────────────────
     function wireControls() {
-      ['filterErrors', 'filterCurrentFile', 'hideVariables', 'filterFunctions'].forEach(id => {
+      ['filterErrors', 'filterCurrentFile', 'hideVariables', 'filterFunctions', 'filterHeaders', 'filterPyImports'].forEach(id => {
         document.getElementById(id).addEventListener('change', e => {
           filterState[id] = e.target.checked;
           applyFilters();
@@ -592,14 +636,32 @@
 
       let visibleIds = new Set();
 
+      // Pre-compute: which included_file / imported_module ids are still reachable
+      // from at least one *non-collapsed* file node. Used below so we only hide
+      // a header/module when ALL files that reference it are collapsed.
+      const reachableFromOpenFile = new Set();
+      links.forEach(l => {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source;
+        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        const rel = l.relationship || l.type || '';
+        if ((rel === 'INCLUDES' || rel === 'IMPORTS') && !collapsedFiles.has(sid)) {
+          reachableFromOpenFile.add(tid);
+        }
+      });
+
       nodes.forEach(n => {
         const nodeType = n.kind || n.type || '';
 
-        // Part 5: collapsed children hidden
-        if (nodeType !== 'file') {
-          // find parent file via BELONGS_TO
+        // Collapsed children: hide BELONGS_TO symbols of collapsed files
+        if (nodeType !== 'file' && nodeType !== 'included_file' && nodeType !== 'imported_module') {
           const parentFileId = findParentFileId(n, links, nodeMap);
           if (parentFileId && collapsedFiles.has(parentFileId)) return;
+        }
+
+        // Hide included_file / imported_module nodes when all their parent
+        // file nodes are collapsed (i.e. not reachable from any open file).
+        if (nodeType === 'included_file' || nodeType === 'imported_module') {
+          if (!reachableFromOpenFile.has(n.id)) return;
         }
 
         // Part 3: zoom-based hiding of symbols
@@ -619,8 +681,41 @@
         // Part 2: hideVariables
         if (filterState.hideVariables && (nodeType === 'variable' || nodeType === 'array')) return;
 
-        // Part 1: filterFunctions — only show function and file nodes
+        // filterFunctions — only show function and file nodes
         if (filterState.filterFunctions && nodeType !== 'function' && nodeType !== 'file') return;
+
+        // filterHeaders — only show included_file nodes and the file nodes that INCLUDE them
+        if (filterState.filterHeaders) {
+          if (nodeType === 'included_file') {
+            // always show header nodes
+          } else if (nodeType === 'file') {
+            // show file node only if it has at least one INCLUDES edge to a visible header
+            const hasInclude = links.some(l => {
+              const sid = typeof l.source === 'object' ? l.source.id : l.source;
+              const rel  = l.relationship || l.type || '';
+              return sid === n.id && rel === 'INCLUDES';
+            });
+            if (!hasInclude) return;
+          } else {
+            return; // hide everything else
+          }
+        }
+
+        // filterPyImports — only show imported_module nodes and the file nodes that IMPORT them
+        if (filterState.filterPyImports) {
+          if (nodeType === 'imported_module') {
+            // always show module nodes
+          } else if (nodeType === 'file') {
+            const hasImport = links.some(l => {
+              const sid = typeof l.source === 'object' ? l.source.id : l.source;
+              const rel  = l.relationship || l.type || '';
+              return sid === n.id && rel === 'IMPORTS';
+            });
+            if (!hasImport) return;
+          } else {
+            return; // hide everything else
+          }
+        }
 
         visibleIds.add(n.id);
       });
@@ -790,40 +885,39 @@
       const g = svg.append('g');
       gRef = g;
 
-      // ── Folder grouping — assign cluster positions to file nodes ──────
-      const folders = new Map();
-      allNodes.forEach(n => {
-        if (n.kind !== 'file') return;
-        const fp = n.file_path || n.file || n.label || '';
-        const parts = fp.split('/');
-        const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
-        if (!folders.has(folder)) folders.set(folder, []);
-        folders.get(folder).push(n);
-      });
-
-      const numFolders = folders.size;
-      const clusterRadius = 300;
-      let folderIndex = 0;
-      folders.forEach((files, folderName) => {
-        const angle = (folderIndex / numFolders) * Math.PI * 2;
-        const clusterX = folderName === 'root' ? width / 2 : width / 2 + Math.cos(angle) * clusterRadius;
-        const clusterY = folderName === 'root' ? height / 2 : height / 2 + Math.sin(angle) * clusterRadius;
-        files.forEach(f => { f.clusterX = clusterX; f.clusterY = clusterY; });
-        folderIndex++;
-      });
-      // Propagate cluster target from file nodes to their symbol children
-      const _nodeMapForCluster = new Map(allNodes.map(n => [n.id, n]));
+      // ── Initial positions: place file nodes in a circle, children near parent ──
+      // No cluster forces — the link spring keeps children close on its own.
+      const initFileNodes = allNodes.filter(n => n.kind === 'file');
+      const nonFileMap = new Map(); // fileId → [child node ids]
+      const _nodeMapInit = new Map(allNodes.map(n => [n.id, n]));
       allLinks.forEach(l => {
         const sid = typeof l.source === 'object' ? l.source.id : l.source;
         const tid = typeof l.target === 'object' ? l.target.id : l.target;
-        if (l.relationship === 'BELONGS_TO') {
-          const sym  = _nodeMapForCluster.get(sid);
-          const file = _nodeMapForCluster.get(tid);
-          if (sym && file) {
-            sym.clusterX = file.clusterX || width / 2;
-            sym.clusterY = file.clusterY || height / 2;
-          }
+        const rel = l.relationship || l.type || '';
+        if (rel === 'BELONGS_TO' || rel === 'INCLUDES' || rel === 'IMPORTS') {
+          // tid is the file for BELONGS_TO; sid is the file for INCLUDES/IMPORTS
+          const fileId = rel === 'BELONGS_TO' ? tid : sid;
+          const childId = rel === 'BELONGS_TO' ? sid : tid;
+          if (!nonFileMap.has(fileId)) nonFileMap.set(fileId, []);
+          nonFileMap.get(fileId).push(childId);
         }
+      });
+      initFileNodes.forEach((fn, i) => {
+        const angle = (i / Math.max(initFileNodes.length, 1)) * Math.PI * 2;
+        // Small initial radius — nodes start close to centre and the
+        // simulation spreads them just enough to avoid overlap.
+        const r = Math.min(initFileNodes.length * 30, 80);
+        fn.x = width / 2 + Math.cos(angle) * r;
+        fn.y = height / 2 + Math.sin(angle) * r;
+        // Place children right on top of their file; spring pulls them to 55px
+        const children = nonFileMap.get(fn.id) || [];
+        children.forEach((cid, j) => {
+          const cn = _nodeMapInit.get(cid);
+          if (!cn) return;
+          const ca = angle + (j / Math.max(children.length, 1)) * Math.PI * 2;
+          cn.x = fn.x + Math.cos(ca) * 20;
+          cn.y = fn.y + Math.sin(ca) * 20;
+        });
       });
 
       // ── Zoom — scaleExtent [0.3, 2.5] ─────────────────────────────────
@@ -869,28 +963,27 @@
       zoomRef = zoom;
       svg.call(zoom);
 
-      // ── Part 2: Initial positions — spread nodes in a circle ──────────
-      allNodes.forEach((d, i) => {
-        const angle = (i / allNodes.length) * Math.PI * 2;
-        const radius = Math.min(width, height) * 0.3;
-        d.x = width / 2 + Math.cos(angle) * radius;
-        d.y = height / 2 + Math.sin(angle) * radius;
-      });
-
-      // ── Part 3: Force simulation with spring physics ───────────────────
+      // ── Part 3: Force simulation ───────────────────────────────────────
       const simulation = d3.forceSimulation(allNodes)
-        .alphaDecay(0.02)
-        .velocityDecay(0.3)
+        .alphaDecay(0.028)
+        .velocityDecay(0.6)
         .force('link', d3.forceLink(allLinks)
           .id(d => d.id)
-          .distance(100))
-        .force('charge', d3.forceManyBody().strength(-400))
-        .force('center', d3.forceCenter(width / 2, height / 2))
+          .distance(d => {
+            const rel = d.relationship || d.type || '';
+            if (rel === 'BELONGS_TO' || rel === 'INCLUDES' || rel === 'IMPORTS') return 55;
+            return 120;
+          })
+          .strength(d => {
+            const rel = d.relationship || d.type || '';
+            if (rel === 'BELONGS_TO' || rel === 'INCLUDES' || rel === 'IMPORTS') return 1.0;
+            return 0.2;
+          }))
+        .force('charge', d3.forceManyBody().strength(-60))   // very gentle repulsion
+        .force('center', d3.forceCenter(width / 2, height / 2).strength(0.8)) // strong pull to centre on startup
         .force('collision', d3.forceCollide()
-          .radius(d => getCollisionRadius(d))
-          .strength(0.8))
-        .force('clusterX', d3.forceX(d => d.clusterX || width / 2).strength(0.15))
-        .force('clusterY', d3.forceY(d => d.clusterY || height / 2).strength(0.15));
+          .radius(d => getCollisionRadius(d) + 4)
+          .strength(0.8));
 
       simulationRef = simulation;
 
@@ -901,6 +994,7 @@
         .enter()
         .append('path')
         .attr('class', d => `link link-${d.relationship}`)
+        .attr('stroke', d => getEdgeColor(d))
         .attr('stroke-dasharray', d => d.relationship === 'BELONGS_TO' ? '5,5' : '0')
         .attr('fill', 'none')
         .attr('stroke-opacity', 0.5);
@@ -934,22 +1028,30 @@
             }
           }, 300);
         })
-        // Collapse/expand on double-click (cancels the pending single-click nav)
+        // Double-click: unpin node (release fx/fy so it floats freely again).
+        // For file nodes, also toggle collapse/expand.
         .on('dblclick', (event, d) => {
           event.stopPropagation();
           if (d._clickTimer) {
             clearTimeout(d._clickTimer);
             d._clickTimer = null;
           }
-          const nodeType = d.kind || d.type || '';
-          if (nodeType !== 'file') return;
 
-          if (collapsedFiles.has(d.id)) {
-            collapsedFiles.delete(d.id);
-          } else {
-            collapsedFiles.add(d.id);
+          // Unpin — let the simulation move this node freely again
+          d.fx = null;
+          d.fy = null;
+          simulation.alpha(0.3).restart();
+
+          // For file nodes also toggle collapse/expand
+          const nodeType = d.kind || d.type || '';
+          if (nodeType === 'file') {
+            if (collapsedFiles.has(d.id)) {
+              collapsedFiles.delete(d.id);
+            } else {
+              collapsedFiles.add(d.id);
+            }
+            applyFilters();
           }
-          applyFilters();
         })
         .call(d3.drag()
           .on('start', dragstarted)
@@ -1006,6 +1108,26 @@
             .attr('x', -s / 2).attr('y', -s / 2)
             .attr('transform', 'rotate(45)')
             .attr('fill', d.hasErrors ? '#ff0000' : '#E5C07B');
+
+        } else if (nodeType === 'included_file') {
+          // C header / included file — hexagonal feel via rotated rect
+          const s = size.radius * 1.8;
+          group.append('rect')
+            .attr('class', 'node')
+            .attr('width', s).attr('height', s)
+            .attr('x', -s / 2).attr('y', -s / 2)
+            .attr('rx', 4)
+            .attr('fill', '#20B2AA');
+
+        } else if (nodeType === 'imported_module') {
+          // Python imported module — rounded square, lime green
+          const s = size.radius * 1.8;
+          group.append('rect')
+            .attr('class', 'node')
+            .attr('width', s).attr('height', s)
+            .attr('x', -s / 2).attr('y', -s / 2)
+            .attr('rx', 4)
+            .attr('fill', '#32CD32');
 
         } else {
           group.append('circle')
@@ -1146,6 +1268,10 @@
       });
 
       // ── Drag ───────────────────────────────────────────────────────────
+      // FILE nodes are pinned on drop (stay where you leave them).
+      // All other nodes (functions, variables, arrays, headers, modules)
+      // release freely so the simulation can continue to move them.
+      // Double-clicking a FILE node unpins it and lets it float again.
       function dragstarted(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
@@ -1159,8 +1285,18 @@
 
       function dragended(event, d) {
         if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
+        const nodeType = d.kind || d.type || '';
+        if (nodeType === 'file') {
+          // FILE nodes stay pinned exactly where dropped.
+          // The link spring (strength 1.0, distance 55) pulls children
+          // in on its own — no extra kick needed.
+          d.fx = event.x;
+          d.fy = event.y;
+        } else {
+          // All other nodes float free after drag
+          d.fx = null;
+          d.fy = null;
+        }
       }
 
       // ── Initial zoom-to-fit ────────────────────────────────────────────
