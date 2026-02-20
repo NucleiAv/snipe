@@ -225,7 +225,7 @@ def get_graph(repo_path: str) -> dict:
             log.warning(f"Failed to load diagnostics: {e}")
 
     # Build dynamic graph with error highlighting
-    graph_data = build_repo_graph(symbols, diagnostics)
+    graph_data = build_repo_graph(symbols, diagnostics, repo_path=repo_path)
 
     return graph_data
 

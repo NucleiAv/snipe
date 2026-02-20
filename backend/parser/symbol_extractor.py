@@ -532,6 +532,49 @@ def _is_array_declarator_context_c(source: bytes, match_end: int) -> bool:
     return False
 
 
+def extract_includes(code: str, file_path: str) -> list[dict]:
+    """Extract #include statements from C/C++ source code."""
+    includes = []
+    for match in re.finditer(r'#include\s*[<"]([^>"]+)[>"]', code):
+        included_file = match.group(1)
+        includes.append({
+            'type': 'include',
+            'file': included_file,
+            'line': code[:match.start()].count('\n') + 1
+        })
+    return includes
+
+
+def extract_imports(code: str, file_path: str) -> list[dict]:
+    """Extract import statements from Python source code."""
+    imports = []
+    for match in re.finditer(r'(?:from\s+(\S+)\s+)?import\s+([^#\n]+)', code):
+        module = match.group(1) or match.group(2).split()[0]
+        module = module.strip().rstrip(';').strip()
+        if module:
+            imports.append({
+                'type': 'import',
+                'module': module,
+                'line': code[:match.start()].count('\n') + 1
+            })
+    return imports
+
+
+def extract_function_calls(code: str, symbols: list[dict]) -> list[dict]:
+    """Find intra-file function calls in source code."""
+    calls = []
+    function_names = [s['name'] for s in symbols if s.get('kind') == 'function']
+    for func_name in function_names:
+        pattern = rf'\b{re.escape(func_name)}\s*\('
+        for match in re.finditer(pattern, code):
+            line_num = code[:match.start()].count('\n') + 1
+            calls.append({
+                'function': func_name,
+                'line': line_num
+            })
+    return calls
+
+
 def extract_symbols_from_source(source: bytes, file_path: str, language: Optional[str] = None) -> list[Symbol]:
     if language is None:
         ext = Path(file_path).suffix.lower()
