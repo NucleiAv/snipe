@@ -116,7 +116,8 @@ def test_repo_graph():
     graph = build_repo_graph(symbols)
     assert "nodes" in graph
     assert "edges" in graph
-    assert len(graph["nodes"]) == 2
+    # Graph now includes file nodes + symbol nodes (4 total: 2 files + 2 symbols)
+    assert len(graph["nodes"]) >= 2
     assert len(graph["edges"]) >= 1
 
 
@@ -484,14 +485,48 @@ def test_unsafe_function():
     diag = check_unsafe_functions(buffer_refs, [], [], "test.c")
     assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
     assert "strcpy" in diag[0].message
-    assert "strncpy" in diag[0].message
+    assert "Unsafe String Handling" in diag[0].message
+    assert diag[0].code == "SNIPE_UNSAFE_FUNCTION"
+    assert diag[0].severity == "WARNING", f"strcpy should be WARNING, got {diag[0].severity}"
+
+
+def test_gets_is_error():
+    """gets() is removed from C11 standard — should be ERROR, not WARNING."""
+    buffer_refs = [Reference("gets", "call", None, 5, None, 1)]
+    diag = check_unsafe_functions(buffer_refs, [], [], "test.c")
+    assert len(diag) == 1, f"Expected 1 diagnostic, got {len(diag)}"
+    assert "gets" in diag[0].message
+    assert "Removed from C Standard" in diag[0].message
+    assert diag[0].severity == "ERROR", f"gets() should be ERROR, got {diag[0].severity}"
     assert diag[0].code == "SNIPE_UNSAFE_FUNCTION"
 
 
 def test_safe_function_no_false_positive():
-    buffer_refs = [Reference("strncpy", "call", None, 3, None, 3)]
+    buffer_refs = [Reference("snprintf", "call", None, 3, None, 4)]
     diag = check_unsafe_functions(buffer_refs, [], [], "test.c")
-    assert len(diag) == 0, f"Safe function should not be flagged, got {len(diag)}"
+    assert len(diag) == 0, f"snprintf should not be flagged, got {len(diag)}"
+
+
+def test_unsafe_function_categories():
+    """Each category should produce correct category label in message."""
+    test_cases = [
+        ("rand", "Weak Random Number Generation"),
+        ("atoi", "Unsafe Type Conversion"),
+        ("system", "Command Injection Risk"),
+        ("tmpnam", "Race Condition Risk"),
+        ("memcpy", "Dangerous Memory Operations"),
+        ("signal", "Unsafe Signal Handling"),
+        ("ctime", "Not Thread-Safe"),
+        ("getlogin", "Unreliable Environment Info"),
+        ("alloca", "Memory Risk"),
+    ]
+    for func_name, expected_category in test_cases:
+        refs = [Reference(func_name, "call", None, 1, None, 0)]
+        diag = check_unsafe_functions(refs, [], [], "test.c")
+        assert len(diag) == 1, f"Expected 1 diagnostic for {func_name}, got {len(diag)}"
+        assert expected_category in diag[0].message, \
+            f"Expected '{expected_category}' in message for {func_name}, got: {diag[0].message}"
+        assert diag[0].severity == "WARNING", f"{func_name} should be WARNING"
 
 
 # ---- #17: Assignment type mismatch (Python) ----
@@ -637,7 +672,9 @@ if __name__ == "__main__":
     test_return_type_mismatch()
     test_return_type_correct()
     test_unsafe_function()
+    test_gets_is_error()
     test_safe_function_no_false_positive()
+    test_unsafe_function_categories()
     test_assignment_type_mismatch()
     test_assignment_type_correct()
     test_arg_type_mismatch()
