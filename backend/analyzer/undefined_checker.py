@@ -54,23 +54,58 @@ PYTHON_COMMON_GLOBALS = {
     "__version__", "__author__", "__package__",
 }
 
-# C standard library functions that should never be flagged
+# C standard library / POSIX / common functions that should never be flagged as undefined.
+# This includes unsafe functions (they ARE defined — just discouraged).
 C_STDLIB_FUNCTIONS = {
+    # stdio
     "printf", "fprintf", "sprintf", "snprintf", "scanf", "fscanf", "sscanf",
-    "malloc", "calloc", "realloc", "free",
-    "memcpy", "memset", "memmove", "memcmp",
-    "strcpy", "strncpy", "strcat", "strncat", "strcmp", "strncmp", "strlen",
-    "strstr", "strchr", "strrchr", "strtok", "strtol", "strtod", "atoi", "atof",
+    "vsprintf", "vsnprintf", "vscanf", "vfscanf", "vsscanf",
     "fopen", "fclose", "fread", "fwrite", "fgets", "fputs", "feof", "fseek", "ftell",
-    "exit", "abort", "atexit", "system", "getenv",
-    "abs", "labs", "div", "ldiv",
-    "rand", "srand", "time", "clock", "difftime",
-    "isalpha", "isdigit", "isalnum", "isspace", "toupper", "tolower",
+    "perror", "puts", "getchar", "putchar", "getc", "putc", "fgetc", "fputc",
+    "gets", "gets_s", "rewind", "freopen", "tmpfile", "tmpnam", "tempnam",
+    "setbuf", "setvbuf", "ungetc", "fflush", "ferror", "clearerr",
+    # stdlib
+    "malloc", "calloc", "realloc", "free", "alloca",
+    "exit", "abort", "atexit", "_exit", "at_quick_exit", "quick_exit",
+    "system", "getenv", "secure_getenv",
+    "abs", "labs", "llabs", "div", "ldiv", "lldiv",
+    "rand", "srand", "random", "srandom", "drand48", "srand48",
+    "atoi", "atol", "atoll", "atof",
+    "strtol", "strtoul", "strtoll", "strtoull", "strtod", "strtof", "strtold",
     "qsort", "bsearch",
-    "perror", "puts", "getchar", "putchar", "gets",
-    "assert", "sizeof",
+    # string
+    "memcpy", "memset", "memmove", "memcmp", "memchr",
+    "strcpy", "strncpy", "strcat", "strncat", "strcmp", "strncmp", "strlen",
+    "strstr", "strchr", "strrchr", "strtok", "strtok_r",
+    "strdup", "strndup", "stpcpy", "strlcpy", "strlcat",
+    "bcopy", "bzero",
+    # ctype
+    "isalpha", "isdigit", "isalnum", "isspace", "isupper", "islower",
+    "isprint", "iscntrl", "ispunct", "isxdigit", "isgraph",
+    "toupper", "tolower",
+    # time
+    "time", "clock", "difftime", "mktime",
+    "ctime", "ctime_r", "asctime", "asctime_r",
+    "gmtime", "gmtime_r", "localtime", "localtime_r",
+    "strftime",
+    # process / exec
+    "fork", "vfork", "execl", "execle", "execlp", "execv", "execvp", "execve",
+    "popen", "pclose", "wait", "waitpid",
+    "pipe", "dup", "dup2",
+    # signal
+    "signal", "sigaction", "raise", "kill",
+    # io
+    "open", "close", "read", "write", "lseek", "ioctl",
+    "select", "poll",
+    # misc
+    "getlogin", "getpwuid", "getuid", "geteuid",
+    "sleep", "usleep", "nanosleep",
+    "mkstemp", "mkdtemp",
+    # variadic
     "va_start", "va_end", "va_arg", "va_copy",
-    "NULL", "main",
+    # keywords / macros
+    "assert", "sizeof", "offsetof",
+    "NULL", "EOF", "main",
 }
 
 

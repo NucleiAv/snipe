@@ -14,6 +14,8 @@ extern void process(int count);
 int main(void) {
     process(5);
     int x = arr[144];
+    strcpy();
+    gets();
     printf("%d\n", x);
     return add(1, 2);
 }
