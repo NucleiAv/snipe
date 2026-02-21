@@ -1,6 +1,8 @@
 # Snipe
 ![snipe logo](https://github.com/NucleiAv/snipe/blob/logo-fix/snipe-logo.png)
 
+Website- https://ui-snipe.vercel.app/
+
 Real-time code analysis that detects **cross-file semantic errors**, type inconsistencies, array bound violations, and function signature drift **while you type**—before files are saved—without external security APIs.
 
 **USP:** *"We catch cross-file bugs before you even save your file."*
