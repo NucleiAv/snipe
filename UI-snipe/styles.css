@@ -427,7 +427,7 @@ h3 {
 
 .logo-png-text {
   width: auto;
-  height: 56px;
+  height: 72px;
   border-radius: 0;
   object-fit: contain;
   mix-blend-mode: screen;
@@ -1634,11 +1634,20 @@ h3 {
 }
 
 .footer-logo img {
-  height: 52px;
+  height: 100px;
   width: auto;
   object-fit: contain;
   display: block;
   margin: 0 auto;
+  mix-blend-mode: screen;
+  opacity: 0.95;
+  transition: opacity var(--transition), filter var(--transition);
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.18));
+}
+
+.footer-logo:hover img {
+  opacity: 1;
+  filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.5));
 }
 
 .footer-tagline {
