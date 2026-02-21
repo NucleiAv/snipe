@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description"
+        content="Snipe — Real-time cross-file semantic code analysis for VSCode. Catch bugs before you save." />
+    <title>Snipe — Kill Bugs Before They Breathe</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@300;400&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+
+    <div class="cursor-dot" id="cursorDot"></div>
+    <div class="cursor-ring" id="cursorRing"></div>
+
+
+    <canvas id="particleCanvas"></canvas>
+
+
+    <div class="mesh-bg" aria-hidden="true">
+        <div class="mesh-orb mesh-orb-1"></div>
+        <div class="mesh-orb mesh-orb-2"></div>
+        <div class="mesh-orb mesh-orb-3"></div>
+    </div>
+
+
+    <header class="nav-header" id="navHeader" role="banner">
+        <nav class="nav-inner" aria-label="Main navigation">
+            <a href="#hero" class="nav-logo" aria-label="Snipe home">
+                <img class="logo-png-text" src="img/snipe-logo.png" alt="Snipe" />
+            </a>
+
+            <button class="nav-burger" id="navBurger" aria-label="Toggle menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+
+            <ul class="nav-links" id="navLinks" role="list">
+                <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+                <li><a href="#features" class="nav-link">Features</a></li>
+                <li><a href="#architecture" class="nav-link">Architecture</a></li>
+                <li><a href="#founders" class="nav-link">Founders</a></li>
+                <li><a href="#download" class="nav-link">Download</a></li>
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+            </ul>
+
+            <a href="https://github.com/NucleiAv/snipe" target="_blank" rel="noopener" class="btn btn-primary nav-cta"
+                id="navCta">
+                Get Extension
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M1 7h12M7 1l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </a>
+        </nav>
+    </header>
+
+    <section class="hero" id="hero" aria-labelledby="heroHeading">
+
+        <div class="hero-splash-track">
+            <div class="hero-splash" aria-hidden="true">
+                <div class="hero-logo-wrap">
+                    <video class="hero-logo-anim" id="heroLogoAnim" autoplay loop muted playsinline
+                        aria-label="Snipe animated logo">
+                        <source src="vc/The_background_should_1080p_202602202158.mp4" type="video/mp4" />
+                    </video>
+                    <div class="hero-logo-glow"></div>
+                </div>
+
+                <div class="hero-scroll-hint">
+                    <div class="scroll-line"></div>
+                    <span class="scroll-label">scroll</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hero-content" id="heroContent">
+            <div class="hero-eyebrow" data-animate="fade-up">
+                <span class="badge">VSCode Extension</span>
+                <span class="badge badge-dim">Open Source</span>
+            </div>
+
+            <h1 class="hero-headline" id="heroHeading" data-animate="fade-up" data-delay="100">
+                Kill bugs<br /><span class="text-gradient">before they breathe.</span>
+            </h1>
+
+            <p class="hero-sub" data-animate="fade-up" data-delay="200">
+                Real-time cross-file semantic analysis — detects type mismatches,<br />
+                array overflows &amp; signature drift <em>while you type.</em> No save required.
+            </p>
+
+            <div class="hero-actions" data-animate="fade-up" data-delay="300">
+                <a href="https://github.com/NucleiAv/snipe" target="_blank" rel="noopener"
+                    class="btn btn-primary btn-lg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path
+                            d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.004.07 1.532 1.032 1.532 1.032.892 1.529 2.341 1.088 2.91.832.091-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.026A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.115 2.504.337 1.909-1.295 2.748-1.026 2.748-1.026.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.934.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.742 0 .267.18.579.688.481C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                    </svg>
+                    Get Extension
+                </a>
+                <a href="#how-it-works" class="btn btn-ghost btn-lg">
+                    See How It Works
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <path d="M7 1v12M1 7l6 6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </a>
+
+
+                <div class="terminal-window" data-animate="fade-up" data-delay="400"
+                    aria-label="Live bug detection demo">
+                    <div class="terminal-titlebar" aria-hidden="true">
+                        <span class="dot dot-red"></span>
+                        <span class="dot dot-yellow"></span>
+                        <span class="dot dot-green"></span>
+                        <span class="terminal-title">snipe — live diagnostics</span>
+                    </div>
+                    <div class="terminal-body" role="region" aria-label="Terminal output">
+                        <div class="terminal-line"><span class="t-dim">INFO</span> &nbsp;<span class="t-muted">Scanned 4
+                                supported files, got</span> <span class="t-cyan">14 symbols</span></div>
+                        <div class="terminal-line t-delay-1"><span class="t-dim">LIVE</span> &nbsp;<span
+                                class="t-muted">Analyzing unsaved buffer</span> <span
+                                class="t-yellow">main.c</span><span class="terminal-cursor"></span></div>
+                        <div class="terminal-line t-delay-2"><span class="t-red">ERR </span> &nbsp;<span
+                                class="t-bright">array out-of-bounds</span> <span class="t-muted">arr[12] — declared
+                                size 10 in core.c </span><span class="t-dim">line 7</span></div>
+                        <div class="terminal-line t-delay-3"><span class="t-red">ERR </span> &nbsp;<span
+                                class="t-bright">signature drift</span> <span class="t-muted">greet() expects 2 args,
+                                got 3 in app.py </span><span class="t-dim">line 15</span></div>
+                        <div class="terminal-line t-delay-4"><span class="t-orange">WARN</span> &nbsp;<span
+                                class="t-bright">type mismatch</span> <span class="t-muted">balance: int (core.c) ↔
+                                float (utils.py) </span><span class="t-dim">line 23</span></div>
+                        <div class="terminal-line t-delay-5"><span class="t-green">OK </span> &nbsp;<span
+                                class="t-muted">POST /analyze</span> <span class="t-cyan">200 OK</span> <span
+                                class="t-muted">— 4 diagnostics</span></div>
+                    </div>
+                </div>
+            </div>
+    </section>
+
+    <main>
+
+        <section class="section" id="how-it-works" aria-labelledby="howHeading">
+            <div class="container">
+                <div class="section-header" data-animate="fade-up">
+                    <span class="section-tag">How It Works</span>
+                    <h2 id="howHeading">Analysis that never sleeps.</h2>
+                    <p class="section-sub">Every keystroke triggers a cross-file semantic pass — no compile, no save.
+                    </p>
+                </div>
+
+                <ol class="steps-list" role="list">
+                    <li class="step-card" data-animate="fade-up" data-delay="0">
+                        <div class="step-num" aria-hidden="true">01</div>
+                        <div class="step-body">
+                            <h3>Capture unsaved buffer</h3>
+                            <p>The VSCode extension captures your in-flight buffer on every keystroke (debounced 300 ms)
+                                and sends it alongside your repo path to the Snipe backend.</p>
+                        </div>
+                        <div class="step-visual step-visual-1" aria-hidden="true">
+                            <div class="code-snippet">
+                                <span class="cs-dim">// extension.ts</span><br />
+                                <span class="cs-kw">onDidChangeTextDocument</span><span class="cs-muted">(e =&gt;
+                                    {</span><br />
+                                &nbsp;&nbsp;<span class="cs-fn">debouncedAnalysis</span><span
+                                    class="cs-muted">(e.document)</span><br />
+                                <span class="cs-muted">})</span>
+                            </div>
+                        </div>
+                    </li>
+
+                    <li class="step-card" data-animate="fade-up" data-delay="80">
+                        <div class="step-num" aria-hidden="true">02</div>
+                        <div class="step-body">
+                            <h3>Build the symbol graph</h3>
+                            <p>The Python/FastAPI backend uses Tree-sitter to parse your repo, extract every symbol, and
+                                build a cross-file graph mapping types, arrays, and function signatures.</p>
+                        </div>
+                        <div class="step-visual step-visual-2" aria-hidden="true">
+                            <div class="graph-mini">
+                                <div class="gn gn-file">app.py</div>
+                                <div class="gn gn-fn">greet()</div>
+                                <div class="gn gn-var">balance</div>
+                                <div class="gn gn-file gn-err">core.c</div>
+                                <svg class="ge" viewBox="0 0 160 80" aria-hidden="true">
+                                    <line x1="30" y1="15" x2="80" y2="40" stroke="#22d3ee44" stroke-width="1" />
+                                    <line x1="30" y1="15" x2="130" y2="15" stroke="#f97316aa" stroke-width="1.5"
+                                        stroke-dasharray="4 2" />
+                                    <line x1="80" y1="40" x2="130" y2="65" stroke="#22d3ee44" stroke-width="1" />
+                                </svg>
+                            </div>
+                        </div>
+                    </li>
+
+                    <li class="step-card" data-animate="fade-up" data-delay="160">
+                        <div class="step-num" aria-hidden="true">03</div>
+                        <div class="step-body">
+                            <h3>Cross-file semantic checks</h3>
+                            <p>Three independent analyzers — type checker, bounds checker, signature checker — compare
+                                your live buffer against the full repo symbol table simultaneously.</p>
+                        </div>
+                        <div class="step-visual step-visual-3" aria-hidden="true">
+                            <div class="checks-list">
+                                <div class="check-item check-ok"><span class="ci-icon">✓</span> Type alignment</div>
+                                <div class="check-item check-err"><span class="ci-icon">✗</span> Array bounds (arr[12]
+                                    &gt; 10)</div>
+                                <div class="check-item check-warn"><span class="ci-icon">⚠</span> Signature drift</div>
+                            </div>
+                        </div>
+                    </li>
+
+                    <li class="step-card" data-animate="fade-up" data-delay="240">
+                        <div class="step-num" aria-hidden="true">04</div>
+                        <div class="step-body">
+                            <h3>Inline warnings + AI explanations</h3>
+                            <p>Diagnostics are pushed back to VSCode as native squiggles. Click any warning to get a
+                                plain-English AI explanation (Claude Sonnet / Gemini Flash) with a fix suggestion.</p>
+                        </div>
+                        <div class="step-visual step-visual-4" aria-hidden="true">
+                            <div class="ai-bubble">
+                                <div class="ai-label">AI Explainer</div>
+                                <div class="ai-text">"You're storing a float result into an int variable. Python will
+                                    silently truncate the decimal — declare <code>count</code> as <code>float</code> or
+                                    use <code>int(result)</code>."</div>
+                            </div>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+        </section>
+
+
+        <section class="section section-alt" id="features" aria-labelledby="featHeading">
+            <div class="container">
+                <div class="section-header" data-animate="fade-up">
+                    <span class="section-tag">Features</span>
+                    <h2 id="featHeading">Everything your linter can't do.</h2>
+                    <p class="section-sub">Snipe goes where single-file static analysis stops.</p>
+                </div>
+
+                <div class="features-grid">
+                    <article class="feat-card feat-large" data-animate="fade-up">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#22d3ee"
+                                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <h3>Cross-File Type Mismatch</h3>
+                        <p>Detects when a variable declared as <code>int</code> in one file is assigned a
+                            <code>float</code> from another — live, across unsaved buffers.
+                        </p>
+                        <div class="feat-tag">Python · C</div>
+                    </article>
+
+                    <article class="feat-card" data-animate="fade-up" data-delay="60">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <path
+                                    d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                                    stroke="#f97316" stroke-width="1.5" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <h3>Array Out-of-Bounds</h3>
+                        <p>Static analysis of array access against definitions in other files. Catches
+                            <code>arr[12]</code> before runtime when the array is size 10.
+                        </p>
+                        <div class="feat-tag">C</div>
+                    </article>
+
+                    <article class="feat-card" data-animate="fade-up" data-delay="120">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <path
+                                    d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"
+                                    stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <h3>Function Signature Drift</h3>
+                        <p>Flags calls with wrong argument counts before compile. Works across file boundaries with the
+                            full repo symbol table.</p>
+                        <div class="feat-tag">Python · C</div>
+                    </article>
+
+                    <article class="feat-card" data-animate="fade-up" data-delay="0">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="3" stroke="#22d3ee" stroke-width="1.5" />
+                                <path
+                                    d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"
+                                    stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <h3>AI Explainer</h3>
+                        <p>Every diagnostic gets a plain-English explanation powered by Claude Sonnet or Gemini Flash —
+                            what it means, why it matters, how to fix it.</p>
+                        <div class="feat-tag">Claude · Gemini</div>
+                    </article>
+
+                    <article class="feat-card" data-animate="fade-up" data-delay="60">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <circle cx="6" cy="6" r="2" stroke="#10b981" stroke-width="1.5" />
+                                <circle cx="18" cy="6" r="2" stroke="#10b981" stroke-width="1.5" />
+                                <circle cx="6" cy="18" r="2" stroke="#f97316" stroke-width="1.5" />
+                                <circle cx="18" cy="18" r="2" stroke="#10b981" stroke-width="1.5" />
+                                <line x1="8" y1="6" x2="16" y2="6" stroke="#22d3ee44" stroke-width="1.5" />
+                                <line x1="6" y1="8" x2="6" y2="16" stroke="#22d3ee44" stroke-width="1.5" />
+                                <line x1="8" y1="18" x2="16" y2="18" stroke="#22d3ee44" stroke-width="1.5" />
+                            </svg>
+                        </div>
+                        <h3>Repo Knowledge Graph</h3>
+                        <p>D3.js force-directed graph of every file and symbol. Error nodes glow red. Click any node to
+                            jump to that exact line in the editor.</p>
+                        <div class="feat-tag">D3.js · Interactive</div>
+                    </article>
+
+                    <article class="feat-card" data-animate="fade-up" data-delay="120">
+                        <div class="feat-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="#22d3ee" stroke-width="1.5"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <h3>Zero-Save, Real-Time</h3>
+                        <p>Analysis fires on every keystroke (debounced 300 ms). No file saving, no manual trigger. The
+                            backend auto-reloads on every change.</p>
+                        <div class="feat-tag">300ms debounce</div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="section" id="architecture" aria-labelledby="archHeading">
+            <div class="container">
+                <div class="section-header" data-animate="fade-up">
+                    <span class="section-tag">Architecture</span>
+                    <h2 id="archHeading">Three layers. One pipeline.</h2>
+                    <p class="section-sub">A TypeScript extension, a Python/FastAPI brain, and a Tree-sitter symbol
+                        engine.</p>
+                </div>
+
+                <div class="arch-diagram" data-animate="fade-up" aria-label="Architecture diagram">
+                    <div class="arch-layer arch-ext">
+                        <div class="arch-layer-label">VSCode Extension (TypeScript)</div>
+                        <div class="arch-components">
+                            <div class="arch-comp">extension.ts</div>
+                            <div class="arch-comp">diagnostics.ts</div>
+                            <div class="arch-comp">graphPanel.ts</div>
+                            <div class="arch-comp">apiClient.ts</div>
+                        </div>
+                    </div>
+
+                    <div class="arch-arrow arch-arrow-down" aria-hidden="true">
+                        <div class="arch-arrow-line"></div>
+                        <div class="arch-arrow-label">POST /analyze · GET /graph · POST /explain</div>
+                    </div>
+
+                    <div class="arch-layer arch-backend">
+                        <div class="arch-layer-label">Backend (Python · FastAPI · port 8765)</div>
+                        <div class="arch-components">
+                            <div class="arch-comp-group">
+                                <div class="arch-comp-title">Parser</div>
+                                <div class="arch-comp">repo_parser</div>
+                                <div class="arch-comp">buffer_parser</div>
+                                <div class="arch-comp">symbol_extractor</div>
+                            </div>
+                            <div class="arch-comp-group">
+                                <div class="arch-comp-title">Analyzer</div>
+                                <div class="arch-comp arch-comp-highlight">type_checker</div>
+                                <div class="arch-comp arch-comp-highlight">bounds_checker</div>
+                                <div class="arch-comp arch-comp-highlight">signature_checker</div>
+                            </div>
+                            <div class="arch-comp-group">
+                                <div class="arch-comp-title">AI + Graph</div>
+                                <div class="arch-comp">ai_explainer</div>
+                                <div class="arch-comp">repo_graph</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="arch-arrow arch-arrow-down" aria-hidden="true">
+                        <div class="arch-arrow-line"></div>
+                        <div class="arch-arrow-label">Tree-sitter · repo_symbols.json</div>
+                    </div>
+
+                    <div class="arch-layer arch-data">
+                        <div class="arch-layer-label">Symbol Store</div>
+                        <div class="arch-components">
+                            <div class="arch-comp">repo_symbols.json</div>
+                            <div class="arch-comp">diagnostics.json</div>
+                            <div class="arch-comp">rules.json</div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="quickstart" data-animate="fade-up">
+                    <div class="qs-header">
+                        <span class="section-tag">Quick Start</span>
+                    </div>
+                    <div class="qs-tabs" role="tablist">
+                        <button class="qs-tab active" role="tab" aria-selected="true" data-tab="mac">macOS /
+                            Linux</button>
+                        <button class="qs-tab" role="tab" aria-selected="false" data-tab="win">Windows</button>
+                    </div>
+                    <div class="qs-panel active" id="tab-mac" role="tabpanel">
+                        <pre><code><span class="c-dim"># 1. Backend</span>
+<span class="c-kw">cd</span> backend
+<span class="c-kw">python3</span> -m venv .venv <span class="c-dim">&amp;&amp;</span> source .venv/bin/activate
+<span class="c-kw">pip</span> install -r requirements.txt
+<span class="c-kw">uvicorn</span> server:app --reload --port 8765
+
+<span class="c-dim"># 2. Extension (new terminal)</span>
+<span class="c-kw">cd</span> extension
+<span class="c-kw">npm</span> install <span class="c-dim">&amp;&amp;</span> npm run compile
+<span class="c-dim"># Then F5 in VS Code → Extension Development Host</span></code></pre>
+                    </div>
+                    <div class="qs-panel" id="tab-win" role="tabpanel" hidden>
+                        <pre><code><span class="c-dim"># 1. Backend</span>
+<span class="c-kw">cd</span> backend
+<span class="c-kw">python</span> -m venv .venv <span class="c-dim">&amp;&amp;</span> .venv\Scripts\activate
+<span class="c-kw">pip</span> install -r requirements.txt
+<span class="c-kw">uvicorn</span> server:app --reload --port 8765
+
+<span class="c-dim"># 2. Extension (new terminal)</span>
+<span class="c-kw">cd</span> extension
+<span class="c-kw">npm</span> install <span class="c-dim">&amp;&amp;</span> npm run compile
+<span class="c-dim"># Then F5 in VS Code → Extension Development Host</span></code></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="section section-alt" id="founders" aria-labelledby="foundersHeading">
+            <div class="container">
+                <div class="section-header" data-animate="fade-up">
+                    <span class="section-tag">Meet the Team</span>
+                    <h2 id="foundersHeading">The people behind <span style="color:#ffffff;">Snipe.</span></h2>
+                </div>
+
+                <div class="founders-grid">
+                    <article class="founder-card" data-animate="fade-up" data-delay="0" style="cursor:pointer;"
+                        onclick="window.open('https://www.linkedin.com/in/anmol-vats-273855228/','_blank')">
+                        <div class="founder-photo-wrap">
+                            <img src="img/anmol.jpeg" alt="Anmol Vats" class="founder-photo" />
+                            <div class="founder-photo-glow"></div>
+                        </div>
+                        <div class="founder-info">
+                            <h3 class="founder-name">Anmol Vats</h3>
+                            <p class="founder-school">New York University</p>
+                        </div>
+                    </article>
+
+                    <article class="founder-card" data-animate="fade-up" data-delay="80" style="cursor:pointer;"
+                        onclick="window.open('https://www.linkedin.com/in/vishva-patel-3b54ab22b/','_blank')">
+                        <div class="founder-photo-wrap">
+                            <img src="img/vishva.jpeg" alt="Vishva Patel" class="founder-photo" />
+                            <div class="founder-photo-glow"></div>
+                        </div>
+                        <div class="founder-info">
+                            <h3 class="founder-name">Vishva Patel</h3>
+                            <p class="founder-school">New York University</p>
+                        </div>
+                    </article>
+
+                    <article class="founder-card" data-animate="fade-up" data-delay="160" style="cursor:pointer;"
+                        onclick="window.open('https://www.linkedin.com/in/raunak-ahmed-3b3193234/','_blank')">
+                        <div class="founder-photo-wrap">
+                            <img src="img/raunak.jpeg" alt="Raunak Ahmed" class="founder-photo" />
+                            <div class="founder-photo-glow"></div>
+                        </div>
+                        <div class="founder-info">
+                            <h3 class="founder-name">Raunak Ahmed</h3>
+                            <p class="founder-school">New York University</p>
+                        </div>
+                    </article>
+
+                    <article class="founder-card" data-animate="fade-up" data-delay="240" style="cursor:pointer;"
+                        onclick="window.open('https://www.linkedin.com/in/kumar-chiranjeev/','_blank')">
+                        <div class="founder-photo-wrap">
+                            <img src="img/chiranjeev.jpeg" alt="Chiranjeev Kumar" class="founder-photo" />
+                            <div class="founder-photo-glow"></div>
+                        </div>
+                        <div class="founder-info">
+                            <h3 class="founder-name">Chiranjeev Kumar</h3>
+                            <p class="founder-school">New York University</p>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="section" id="contact" aria-labelledby="contactHeading">
+            <div class="container">
+                <div class="section-header" data-animate="fade-up">
+                    <span class="section-tag">Contact Us</span>
+                    <h2 id="contactHeading">Get in <span class="text-gradient">touch.</span></h2>
+                    <p class="section-sub">Have questions or want to collaborate? Drop us a line.</p>
+                </div>
+
+                <form class="contact-form" id="contactForm" data-animate="fade-up" novalidate>
+                    <div class="contact-fields">
+                        <div class="contact-field">
+                            <label for="contactName" class="contact-label">Name</label>
+                            <input type="text" id="contactName" name="name" class="contact-input"
+                                placeholder="Your full name" autocomplete="name" required />
+                        </div>
+                        <div class="contact-field">
+                            <label for="contactPhone" class="contact-label">Phone Number</label>
+                            <input type="tel" id="contactPhone" name="phone" class="contact-input"
+                                placeholder="+1 (555) 000-0000" autocomplete="tel" />
+                        </div>
+                        <div class="contact-field contact-field-full">
+                            <label for="contactEmail" class="contact-label">Email</label>
+                            <input type="email" id="contactEmail" name="email" class="contact-input"
+                                placeholder="you@example.com" autocomplete="email" required />
+                        </div>
+                    </div>
+                    <div class="contact-submit">
+                        <button type="submit" class="btn btn-primary btn-lg" id="contactSubmit">
+                            Send Message
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+
+        <section class="section section-download" id="download" aria-labelledby="dlHeading">
+            <div class="container">
+                <div class="dl-content" data-animate="fade-up">
+                    <div class="dl-glow" aria-hidden="true"></div>
+                    <span class="section-tag">Download</span>
+                    <h2 id="dlHeading">Start catching bugs<br /><span class="text-gradient">before they catch
+                            you.</span></h2>
+                    <p class="section-sub">Open source. No telemetry. No accounts. Just better code.</p>
+
+                    <div class="dl-actions">
+                        <a href="https://github.com/NucleiAv/snipe" target="_blank" rel="noopener"
+                            class="btn btn-primary btn-xl" id="downloadBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path
+                                    d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.004.07 1.532 1.032 1.532 1.032.892 1.529 2.341 1.088 2.91.832.091-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.026A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.115 2.504.337 1.909-1.295 2.748-1.026 2.748-1.026.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.934.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.742 0 .267.18.579.688.481C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                            </svg>
+                            View on GitHub
+                        </a>
+                        <a href="https://github.com/NucleiAv/snipe/archive/refs/heads/main.zip"
+                            class="btn btn-outline btn-xl">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
+                                    stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                            Download ZIP
+                        </a>
+                    </div>
+
+                    <div class="dl-stats">
+                        <div class="stat-pill">
+                            <span class="stat-val">Python · C</span>
+                            <span class="stat-label">Supported languages</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="stat-val">300ms</span>
+                            <span class="stat-label">Analysis debounce</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="stat-val">MIT</span>
+                            <span class="stat-label">License</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="stat-val">0</span>
+                            <span class="stat-label">Telemetry</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+    <footer class="site-footer" role="contentinfo">
+        <div class="container footer-inner">
+            <a href="#hero" class="footer-logo" aria-label="Snipe — back to top">
+                <img src="img/snipe-logo.png" alt="Snipe" width="72" height="24" />
+            </a>
+            <p class="footer-tagline">Real-time cross-file semantic analysis for VSCode.</p>
+            <nav class="footer-links" aria-label="Footer navigation">
+                <a href="https://github.com/NucleiAv/snipe" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/NucleiAv/snipe/blob/main/live_repo_aware_semantic_guardian_sdp_and_srs.md"
+                    target="_blank" rel="noopener">Docs</a>
+                <a href="https://github.com/NucleiAv/snipe/blob/main/CONTRIBUTING.md" target="_blank"
+                    rel="noopener">Contribute</a>
+                <a href="https://github.com/NucleiAv/snipe/blob/main/License" target="_blank" rel="noopener">MIT
+                    License</a>
+            </nav>
+            <p class="footer-copy">&copy; 2025 Snipe. Open source &amp; built by developers, for developers.</p>
+        </div>
+    </footer>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
