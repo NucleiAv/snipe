@@ -853,11 +853,13 @@ h3 {
 }
 
 .scroll-line {
-  width: 1px;
-  height: 48px;
-  background: linear-gradient(to bottom, var(--cyan-dim), transparent);
+  width: 3px;
+  height: 80px;
+  background: linear-gradient(to bottom, var(--cyan), transparent);
+  border-radius: 3px;
   animation: scrollPulse 2s ease-in-out infinite;
-  will-change: transform;
+  will-change: transform, box-shadow;
+  box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(34, 211, 238, 0.5);
 }
 
 @keyframes scrollPulse {
@@ -866,19 +868,37 @@ h3 {
   100% {
     transform: scaleY(1);
     opacity: 1;
+    box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(34, 211, 238, 0.5);
   }
 
   50% {
     transform: scaleY(0.6);
-    opacity: 0.5;
+    opacity: 0.7;
+    box-shadow: 0 0 16px var(--cyan), 0 0 40px rgba(34, 211, 238, 0.8);
   }
 }
 
 .scroll-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
+  font-size: 0.82rem;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4);
+  animation: labelGlow 2s ease-in-out infinite;
+}
+
+@keyframes labelGlow {
+
+  0%,
+  100% {
+    text-shadow: 0 0 8px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4);
+    opacity: 1;
+  }
+
+  50% {
+    text-shadow: 0 0 16px rgba(34, 211, 238, 1), 0 0 40px rgba(34, 211, 238, 0.7);
+    opacity: 0.85;
+  }
 }
 
 .steps-list {
@@ -1605,10 +1625,20 @@ h3 {
   background-clip: text;
   grid-column: span 3;
   transition: opacity var(--transition);
+  text-align: center;
+  justify-self: center;
 }
 
 .footer-logo:hover {
   opacity: 0.8;
+}
+
+.footer-logo img {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 
 .footer-tagline {
